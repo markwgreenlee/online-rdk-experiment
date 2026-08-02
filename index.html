@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Motion & Attention Study</title>
+
+    <!-- jsPsych core (7.x) -->
+    <script src="https://unpkg.com/jspsych@7.3.4"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css"
+    />
+
+    <!-- jsPsych core plugins (7.x compatible: 1.x line) -->
+    <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-browser-check@1.0.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-fullscreen@1.2.1"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@1.1.4"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-virtual-chinrest@2.0.3"></script>
+
+    <!-- community: DataPipe (OSF) — 0.4 line is jsPsych 7 compatible -->
+    <script src="https://unpkg.com/@jspsych-contrib/plugin-pipe@0.4"></script>
+
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        color: #fff;
+        font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .jspsych-content { max-width: 100%; color: #fff; }
+      .jspsych-btn {
+        background: #222; color: #fff; border: 1px solid #555;
+        padding: 10px 18px; border-radius: 6px; font-size: 1em; margin: 6px;
+      }
+      .jspsych-btn:hover { background: #333; }
+
+      /* Virtual-chinrest blind-spot fixation target.
+         The plugin draws the fixation square with an inline
+         `background-color:#000`, and its container (#svgDiv) has no background
+         of its own, so on this study's black page the square is invisible.
+         Force it to a light grey and give the blind-spot stage a mid-grey
+         backdrop so both the square and the red ball read clearly. `!important`
+         is required to beat the plugin's inline style. */
+      #virtual-chinrest-square {
+        background-color: #ffffff !important;
+      }
+      #blind-spot, #svgDiv {
+        background-color: #808080;
+        color: #000;
+      }
+      #blind-spot { padding: 16px; border-radius: 8px; }
+    </style>
+  </head>
+
+  <body></body>
+
+  <!-- application scripts, in dependency order:
+       config  -> helpers -> custom plugin -> experiment (jsPsych init + builders)
+       -> sections (screens) -> run (assemble + run) -->
+  <script src="config.js"></script>
+  <script src="helpers.js"></script>
+  <script src="plugins/plugin-rdk-load.js"></script>
+  <script src="experiment.js"></script>
+  <script src="sections.js"></script>
+  <script src="run.js"></script>
+</html>

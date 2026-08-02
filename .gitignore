@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+
+# Participant data — never commit raw trial-level data or IDs
+# (aggregate analysis CSVs in analysis/ are safe; raw per-subject CSVs are not)
+data/
+*_raw.csv
+ANON-*.csv
+PROLIFIC-*.csv

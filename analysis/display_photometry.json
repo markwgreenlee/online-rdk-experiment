@@ -1,0 +1,20 @@
+{
+  "_README": "Lab-only endpoint photometry for the pilot displays. Measured with a Minolta spot photometer, screen normal, central patch, same room lighting as the sessions, >=15 min warm-up. Fill L_black_cd_m2 (255=0 pixel value) and L_white_cd_m2 (255 pixel value) per display. Units: cd/m^2. This characterises the lab Mac-vs-Dell comparison only; online participants run on uncalibrated consumer displays and are NOT covered by this file. The pixel values are the stimulus endpoints: dots = #ffffff (white), background = #000000 (black).",
+  "measured_by": null,
+  "measured_date": null,
+  "instrument": "Minolta spot photometer",
+  "displays": {
+    "Dell-2209WA": {
+      "note": "External secondary LCD used for translation + rotation (and the Monday spiral/translation replicate).",
+      "px2mm_nominal": 3.95,
+      "L_black_cd_m2": null,
+      "L_white_cd_m2": null
+    },
+    "Mac-Retina-builtin": {
+      "note": "Built-in MacBook Retina panel used for the Saturday spiral run.",
+      "px2mm_nominal": 4.62,
+      "L_black_cd_m2": null,
+      "L_white_cd_m2": null
+    }
+  }
+}
