@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Photometry target — white patch on black</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000000; overflow: hidden; }
+  /* Pure stimulus endpoints: dots = #ffffff, background = #000000 (matches the RDK). */
+  body.invert { background: #ffffff; }        /* white surround for black-patch reading */
+  #patch {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: #ffffff;
+    /* size set in JS from px-per-mm */
+  }
+  body.invert #patch { background: #000000; }  /* black patch on white */
+  #hud {
+    position: fixed; top: 8px; left: 8px;
+    font: 13px/1.5 -apple-system, Menlo, monospace;
+    color: #555;                 /* dim so stray light near the corner is negligible */
+    background: rgba(0,0,0,0.0);
+    white-space: pre; z-index: 10;
+    -webkit-user-select: none; user-select: none;
+  }
+  #hud b { color: #888; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div id="patch"></div>
+  <div id="hud"></div>
+<script>
+(function () {
+  // --- calibration state -----------------------------------------------------
+  // px_per_mm: physical pixels per millimetre for THIS display.
+  // Seeded from the Dell 2209WA card-resize calibration (display_photometry.json).
+  // VERIFY with a ruler and nudge until the patch measures exactly the target.
+  var state = {
+    px_per_mm: 3.95,     // Dell-2209WA nominal; Mac-Retina-builtin ≈ 4.62
+    target_mm: 20.0,     // 2.0 cm square
+    dpr: window.devicePixelRatio || 1,
+    hud: true
+  };
+
+  var patch = document.getElementById('patch');
+  var hud = document.getElementById('hud');
+
+  // measurement mode: what the photometer should be pointed at
+  //   'white_patch'  white square on black  -> read WHITE (stimulus dot)
+  //   'black_field'  full black             -> read BLACK background (no glare)
+  //   'black_patch'  black square on white  -> read BLACK in bright surround (glare)
+  //   'white_field'  full white             -> read WHITE surround
+  var mode = 'white_patch';
+  var MODE_LABEL = {
+    white_patch: 'WHITE square on black  \u2192 read WHITE (dot endpoint)',
+    black_field: 'full BLACK field       \u2192 read BLACK background (no glare)',
+    black_patch: 'BLACK square on white  \u2192 read BLACK in bright surround (glare)',
+    white_field: 'full WHITE field       \u2192 read WHITE surround'
+  };
+  function setMode(m) {
+    mode = m;
+    document.body.classList.toggle('invert', m === 'black_patch' || m === 'white_field');
+    patch.classList.toggle('hidden', m === 'black_field' || m === 'white_field');
+  }
+
+  function cssPxFromMm(mm) {
+    // We size in CSS px. Physical px = CSS px * devicePixelRatio, so to place
+    // `physical px` on screen we divide by dpr.
+    var physical_px = mm * state.px_per_mm;
+    return physical_px / state.dpr;
+  }
+
+  function render() {
+    var side_css = cssPxFromMm(state.target_mm);
+    patch.style.width = side_css + 'px';
+    patch.style.height = side_css + 'px';
+    var side_phys = side_css * state.dpr;
+    hud.classList.toggle('hidden', !state.hud);
+    // dim the HUD to mid-gray on white surrounds so it stays readable but low-glare
+    hud.style.color = (mode === 'black_patch' || mode === 'white_field') ? '#aaa' : '#555';
+    hud.innerHTML =
+      '<b>Photometry target</b>   mode: <b>' + mode + '</b>\n' +
+      MODE_LABEL[mode] + '\n' +
+      '\n' +
+      'patch: ' + state.target_mm.toFixed(1) + ' mm  (' +
+        (state.target_mm/10).toFixed(2) + ' cm)  =  ' +
+        side_phys.toFixed(1) + ' device-px\n' +
+      'px/mm: ' + state.px_per_mm.toFixed(3) +
+        '   devicePixelRatio: ' + state.dpr + '\n' +
+      '\n' +
+      'RULER CHECK: measure the square with a ruler (any patch mode).\n' +
+      '  \u2191/\u2193  adjust px/mm  (fine: Shift)     \u2190/\u2192  target size \u00b11 mm\n' +
+      '  1  white square on black   (read WHITE dot)\n' +
+      '  2  full black field        (read BLACK bg, no glare)\n' +
+      '  3  black square on white   (read BLACK in bright surround)\n' +
+      '  4  full white field        (read WHITE surround)\n' +
+      '  F  fullscreen    H  hide/show this text (hide before reading!)\n' +
+      '  R  reset to Dell 3.95 px/mm';
+  }
+
+  document.addEventListener('keydown', function (e) {
+    var k = e.key;
+    var fine = e.shiftKey;
+    if (k === 'ArrowUp')      { state.px_per_mm += fine ? 0.01 : 0.05; }
+    else if (k === 'ArrowDown'){ state.px_per_mm = Math.max(0.5, state.px_per_mm - (fine ? 0.01 : 0.05)); }
+    else if (k === 'ArrowRight'){ state.target_mm += 1; }
+    else if (k === 'ArrowLeft'){ state.target_mm = Math.max(1, state.target_mm - 1); }
+    else if (k === '1') { setMode('white_patch'); }
+    else if (k === '2') { setMode('black_field'); }
+    else if (k === '3') { setMode('black_patch'); }
+    else if (k === '4') { setMode('white_field'); }
+    else if (k === 'h' || k === 'H') { state.hud = !state.hud; }
+    else if (k === 'r' || k === 'R') { state.px_per_mm = 3.95; state.target_mm = 20.0; }
+    else if (k === 'f' || k === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+      return;
+    } else { return; }
+    e.preventDefault();
+    render();
+  });
+
+  window.addEventListener('resize', function () {
+    state.dpr = window.devicePixelRatio || 1; render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

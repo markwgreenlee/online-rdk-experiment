@@ -667,6 +667,34 @@ spiral-vs-translation contrast in which neither display nor day varies. Until
 that replicate exists, the pilot spiral threshold should be reported as
 display/day-confounded and not treated as a clean motion-type estimate.
 
+**Photometry (Minolta spot photometer, 2026-08-03) narrows the display half of
+the confound to a single dimension.** Endpoint luminances were measured on both
+panels (2 cm patch via `analysis/photometry_target.html`, stored in
+`analysis/display_photometry.json`; loaded by `weibull_analysis.py --photometry`):
+
+- **Dell 2209WA** — white **189 cd/m²**, black **0.35 cd/m²**, Michelson **0.9963**.
+- **Mac Retina** — white **372 cd/m²**, black **0.40 cd/m²**, Michelson **0.9979**
+  — but these were read at **maximum** brightness, whereas the Saturday spiral run
+  used the macOS **"normal"** setting, which was *not* photometered and is
+  therefore **unknown**. The Mac's canonical endpoints in the JSON are left
+  `null` for this reason (the `…_max_…` fields retain the max readings as
+  metadata), so no cross-display luminance ratio is computed from a state that
+  does not describe the data.
+
+Two conclusions follow. First, **contrast is ruled out as the confound**: both
+panels sit at Michelson ≈ 0.996–0.998 (differ by 0.0015), as expected for a
+255-on-0 stimulus, and their black floors are essentially identical
+(0.35 vs 0.40 cd/m²). Second, **absolute white luminance is the surviving display
+suspect** — at max the Mac is ≈1.97× the Dell, and the Saturday spiral was on the
+brighter panel; the true Saturday ratio is unknown but was ≤ that. Panel
+persistence (LCD response) remains uncharacterised by photometry. **Go-forward
+decision:** all further data collection is **consolidated on the Dell at one
+fixed, documented brightness** (recorded in `display_photometry.json`), which
+removes the cross-display luminance term entirely — a single display at a single
+setting has nothing to match. The Monday Dell spiral+translation replicate
+resolves the confound directly, so the unknown Saturday Mac luminance no longer
+needs to be recovered.
+
 For the online sample the analogous risk is per-participant: each participant
 self-calibrates and their three runs may fall on different days or devices. A
 display-provenance check that flags participants whose runs were not collected

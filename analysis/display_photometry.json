@@ -1,20 +1,29 @@
 {
-  "_README": "Lab-only endpoint photometry for the pilot displays. Measured with a Minolta spot photometer, screen normal, central patch, same room lighting as the sessions, >=15 min warm-up. Fill L_black_cd_m2 (255=0 pixel value) and L_white_cd_m2 (255 pixel value) per display. Units: cd/m^2. This characterises the lab Mac-vs-Dell comparison only; online participants run on uncalibrated consumer displays and are NOT covered by this file. The pixel values are the stimulus endpoints: dots = #ffffff (white), background = #000000 (black).",
+  "_README": "Lab-only endpoint photometry for the pilot displays. Measured with a Minolta spot photometer, screen normal, central patch, same room lighting as the sessions, >=15 min warm-up, patch = 2.0 cm square via analysis/photometry_target.html. Units: cd/m^2. Canonical stimulus endpoints (used by weibull_analysis.py --photometry): L_white_cd_m2 = white patch on black (pixel 255, the RDK dot), L_black_cd_m2 = full black field (pixel 0, the RDK background, no glare). Extra panel-characterisation fields: L_black_bright_surround_cd_m2 = black patch on white (black floor lifted by veiling glare/scatter from bright surround), L_white_field_cd_m2 = full white field (checks auto-brightness-limiting / white clipping). This characterises the lab Mac-vs-Dell comparison only; online Prolific participants run on uncalibrated consumer displays and are NOT covered by this file. Dots = #ffffff (white), background = #000000 (black).",
   "measured_by": null,
-  "measured_date": null,
+  "measured_date": "2026-08-03",
   "instrument": "Minolta spot photometer",
   "displays": {
     "Dell-2209WA": {
       "note": "External secondary LCD used for translation + rotation (and the Monday spiral/translation replicate).",
       "px2mm_nominal": 3.95,
-      "L_black_cd_m2": null,
-      "L_white_cd_m2": null
+      "L_black_cd_m2": 0.35,
+      "L_white_cd_m2": 189.0,
+      "L_black_bright_surround_cd_m2": 4.44,
+      "L_white_field_cd_m2": 190.0,
+      "brightness_setting": "Fixed lab setting, measured 2026-08-03; REFERENCE display for all runs going forward. (Day-1 translation/rotation were on this Dell; brightness assumed unchanged but not independently verified.)"
     },
     "Mac-Retina-builtin": {
-      "note": "Built-in MacBook Retina panel used for the Saturday spiral run.",
+      "note": "Built-in MacBook Retina panel used for the Saturday spiral run AT THE 'NORMAL' BRIGHTNESS SETTING (not photometered; value unknown). The luminances below were read on 2026-08-03 at MAX brightness, which is NOT the data-collection condition, so the canonical endpoints are left null and the max readings are stored separately as panel metadata. Decision: Mac retired in favour of the Dell as the reference display; the Monday Dell spiral+translation replicate resolves the display/day confound directly, so the Saturday Mac luminance no longer needs to be recovered.",
       "px2mm_nominal": 4.62,
+      "brightness_setting": "Saturday spiral: macOS 'normal' (unknown). Readings below: MAX.",
       "L_black_cd_m2": null,
-      "L_white_cd_m2": null
+      "L_white_cd_m2": null,
+      "L_white_max_cd_m2": 372.0,
+      "L_black_max_cd_m2": 0.4,
+      "L_black_bright_surround_max_cd_m2": 6.5,
+      "L_white_field_max_cd_m2": 377.0
     }
-  }
+  },
+  "go_forward": "Consolidate all data collection on the Dell-2209WA at this one fixed, documented brightness. This removes the cross-display luminance confound entirely (single display, single luminance). The Saturday Mac spiral stays in the analysis tagged display/day-confounded until the Monday Dell replicate."
 }
