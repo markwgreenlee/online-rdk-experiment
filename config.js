@@ -53,9 +53,9 @@ const CONFIG = {
 
   /* ---------------- RSVP central stream ---------------- */
   RSVP_TARGET: "X",
-  RSVP_LENGTH: 10, // items per stream
+  RSVP_LENGTH: 6, // items per stream (6 x 150 ms = 900 ms, fits MOTION_DURATION_MS)
   RSVP_MAX_TARGETS: 2, // 0..2 targets, uniform (shared by both load conditions)
-  RSVP_ITEM_MS: 100, // 10 items/s
+  RSVP_ITEM_MS: 150, // 6.7 items/s
   RSVP_LETTER_DEG: 0.8,
   RSVP_COLOR: "#7fd4ff",
 
@@ -63,7 +63,7 @@ const CONFIG = {
   // Coherence levels sampled to span floor-to-ceiling accuracy for the
   // psychometric fit. Logarithmically spaced.
   COHERENCE_LEVELS: [0.04, 0.08, 0.16, 0.32, 0.64],
-  MOTION_DURATION_MS: 1000, // stimulus is fixed at 1 s (>= stream 10x100ms)
+  MOTION_DURATION_MS: 1000, // stimulus is fixed at 1 s (>= stream 6x150ms)
 
   // Motion type for THIS run. One type per run (separate deployments / runs
   // avoid within-session confusion). Overridable at deploy time with the
