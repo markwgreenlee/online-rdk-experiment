@@ -35,14 +35,15 @@ threshold from each is a valid baseline for the corresponding pattern in the
 desktop **vection** experiment (translation ↔ linear vection; rotation and
 spiral ↔ *circular* vection).
 
-Simultaneously, a rapid stream of letters (**RSVP**) is shown at fixation. A
+Simultaneously, a rapid stream of letters (**RSVP**) is shown at fixation —
+**6 letters × 150 ms = 900 ms**, inside the 1000 ms motion stimulus. A
 between-block **attentional-load** manipulation changes what the participant
 must do with that stream:
 
 | Load | Secondary (letter) task | Demand |
 |------|-------------------------|--------|
 | **Low**  | "Did the letter **X** appear?" (yes/no) | minimal — detection |
-| **High** | "How many **X**s appeared?" (0–3) | high — working-memory count |
+| **High** | "How many **X**s appeared?" (0–2) | high — working-memory count |
 
 Crucially, **the letter stream is generated identically in both conditions**
 (same seeded generator), so the *visual input* is matched and only the *task
@@ -63,6 +64,9 @@ function) in the high-load blocks — panel *b* of the figure above.
   (`radial_direction`). The participant judges *only* rotational sense.
 - **Load:** low vs high, run as two blocks, order counterbalanced across
   participants.
+- **RSVP stream:** 6 letters at 150 ms/item (900 ms), 0–2 targets drawn
+  uniformly, never in the first or last slot. The stream **must fit inside
+  `MOTION_DURATION_MS`** — see §1b.
 - **Trials:** 2 load × 5 coherence × 2 direction × 8 reps = **160 test trials**
   per run (spiral's expand/contract split lives inside the 8 reps), + 10
   practice trials.
@@ -170,6 +174,51 @@ function overlaps at every level, not just on average.
   measure is swamped by the noise pedestal (~5000× the signal energy) and cannot
   discriminate the types. The coherent (signal) kinematic energy is the
   operative, discriminable quantity — and it is matched.
+
+---
+
+## 1b. Secondary-task timing (recalibrated 2026-08-21)
+
+The RSVP stream was originally **10 letters × 100 ms**. Across the nine
+single-participant pilot runs this put the **high-load counting task on the
+floor**: accuracy never exceeded 0.60 against a 0.333 chance level, and
+responses collapsed onto "1" almost regardless of the true count (0.13 correct
+on trials where two targets actually appeared — *below* chance). Only **3 of 9
+runs passed** the RSVP load pre-check (§8), so most runs' high-vs-low threshold
+contrasts were not interpretable as a load effect at all. A participant at floor
+may simply have abandoned the letter task, in which case the two blocks differ
+in instructions but not in attentional load.
+
+The stream is now **6 letters × 150 ms**. Each letter is on screen half again as
+long, which is the change intended to lift the counting task off the floor.
+
+**The stream length and item duration are coupled to `MOTION_DURATION_MS` and
+cannot be set independently.** `plugin-rdk-load.js` ends the trial at
+`MOTION_DURATION_MS` (the animation loop's exit condition) but counts targets
+over the **whole** `rsvp_stream` when scoring. If the stream outlasts the motion
+stimulus, the scored answer includes letters that were never drawn and the task
+becomes unanswerable. So:
+
+```
+RSVP_LENGTH × RSVP_ITEM_MS  ≤  MOTION_DURATION_MS
+      6      ×     150      =  900 ms  ≤  1000 ms   ✓
+```
+
+This is why slowing the stream to 150 ms required shortening it to 6 items
+rather than leaving it at 10 (10 × 150 = 1500 ms would have silently dropped the
+last 3 letters). Motion duration was deliberately **left at 1000 ms** so
+thresholds stay comparable to the runs already collected and to the desktop
+study's motion-energy matching.
+
+Two consequences to keep in mind when reading the next runs:
+
+- **Target density rose.** 0–2 targets in 6 items is denser than 0–2 in 10, so
+  the counting task is slower *and* somewhat more crowded. If the floor
+  persists, `RSVP_MAX_TARGETS` is the next parameter to touch.
+- **Pre- and post-change runs are not poolable on the secondary task.** The
+  low-load "always-yes" base rate depends on the target-count distribution, so
+  the chance levels the pre-check compares against differ between the two stream
+  designs. Motion thresholds remain comparable; RSVP accuracies do not.
 
 ---
 
