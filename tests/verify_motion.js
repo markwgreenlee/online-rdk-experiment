@@ -408,6 +408,89 @@ console.log("\n[instruction / key-order consistency]");
     /radialGlyph\("&larr;&rarr;", "outward"\)/.test(plugin));
 }
 
+// ============================================= CALIBRATION -> RENDERED APERTURE
+// The virtual chinrest with resize_units:"deg" scales #jspsych-content and then
+// REPORTS the post-scale px2deg, which equals pixels_per_unit (40) in every run
+// by construction. The RDK canvas lives outside that wrapper, so handing it the
+// reported value drew the stimulus 1/scale_factor too large -- across the first
+// 11 runs the nominal 7 deg aperture was really 7.2-8.8 deg. These checks pin
+// (a) that sections.js recovers the TRUE px/deg, and (b) that the plugin then
+// renders an aperture of exactly the calibrated angular size.
+console.log("\n[calibration -> rendered aperture]");
+{
+  // ---- (a) run the REAL on_finish derivation in sections.js ----
+  const sandbox = { console, Math, Date, JSON, parseInt, parseFloat, isFinite,
+                    isNaN, Number, String, Array, Object, setTimeout };
+  sandbox.window = sandbox;
+  sandbox.document = { body: {}, getElementById: () => ({ style: {} }),
+                       createElement: () => ({ style: {}, appendChild() {} }) };
+  sandbox.window.location = { search: "", href: "" };
+  let captured = null;
+  sandbox.window.ExpBuild = { setPxPerDegree: (v) => { captured = v; } };
+  sandbox.window.__JSPSYCH__ = {
+    data: { addProperties: (o) => { sandbox.__props = Object.assign(sandbox.__props || {}, o); },
+            getURLVariable: () => undefined },
+  };
+  for (const g of ["jsPsychBrowserCheck","jsPsychFullscreen","jsPsychHtmlButtonResponse",
+                   "jsPsychHtmlKeyboardResponse","jsPsychInstructions","jsPsychPipe",
+                   "jsPsychPreload","jsPsychSurveyHtmlForm","jsPsychVirtualChinrest"])
+    sandbox[g] = { name: g };
+  vm.createContext(sandbox);
+  for (const f of ["config.js", "helpers.js"])
+    vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), sandbox, { filename: f });
+  vm.runInContext(fs.readFileSync(path.join(ROOT, "sections.js"), "utf8"), sandbox,
+                  { filename: "sections.js" });
+  const cal = sandbox.window.SECTIONS && sandbox.window.SECTIONS.calibration;
+  check("sections.js exposes the calibration node", !!(cal && cal.on_finish));
+
+  // a real observed case: run ANON-3D22LCQJK5 reported px2deg 40, scale_factor 0.8517
+  const SF = 0.8517, REPORTED = 40;
+  cal.on_finish({ px2deg: REPORTED, scale_factor: SF, view_dist_mm: 563.4,
+                  win_width_deg: 48, item_width_mm: 85.6 });
+  const expected = REPORTED * SF;                     // 34.068 px/deg, the TRUE value
+  check("on_finish recovers px2deg_true = reported x scale_factor",
+    Math.abs(captured - expected) < 1e-9,
+    "got " + captured + " expected " + expected);
+  check("on_finish does NOT pass the reported (post-scale) value through",
+    Math.abs(captured - REPORTED) > 1e-6, "got " + captured);
+  check("both the true and reported px/deg are logged",
+    sandbox.__props.px_per_degree === expected &&
+    sandbox.__props.px_per_degree_reported === REPORTED &&
+    sandbox.__props.chinrest_scale_factor === SF);
+
+  // unscaled case (resize_units:"none"): px2deg is already true, leave it alone
+  captured = null;
+  cal.on_finish({ px2deg: 33.3, view_dist_mm: 600 });
+  check("no scale_factor -> px2deg used unchanged", Math.abs(captured - 33.3) < 1e-9,
+    "got " + captured);
+
+  // ---- (b) the plugin then renders exactly that angular size ----
+  const ppdTrue = expected;
+  const { frames } = runTrial({ ...baseTrial, px_per_degree: ppdTrue,
+                                motion_type: "radial", direction: "expand" });
+  let rMax = 0, rMin = Infinity;
+  for (const fr of frames) for (const d of fr) {
+    const rr = Math.hypot(d.x, d.y);
+    if (rr > rMax) rMax = rr;
+    if (rr < rMin) rMin = rr;
+  }
+  const outerDeg = rMax / ppdTrue, innerDeg = rMin / ppdTrue;
+  console.log("  rendered aperture: " + innerDeg.toFixed(3) + "-" + outerDeg.toFixed(3) +
+              " deg at " + ppdTrue.toFixed(2) + " px/deg (nominal " + R_IN + "-" + R_OUT + ")");
+  check("rendered OUTER edge matches the calibrated angular size",
+    outerDeg <= R_OUT + 1e-6 && outerDeg > R_OUT * 0.98,
+    "outer=" + outerDeg.toFixed(4) + " deg");
+  check("rendered INNER edge matches the calibrated angular size",
+    innerDeg >= R_IN - 1e-6 && innerDeg < R_IN * 1.02,
+    "inner=" + innerDeg.toFixed(4) + " deg");
+  // the regression itself: had we used the reported 40, the SAME pixel geometry
+  // would subtend 7/scale_factor deg on this display
+  const wouldHaveBeen = (R_OUT * REPORTED) / ppdTrue;
+  check("using the reported px/deg would have over-sized the aperture",
+    wouldHaveBeen > R_OUT * 1.1,
+    "would have subtended " + wouldHaveBeen.toFixed(2) + " deg instead of " + R_OUT);
+}
+
 console.log("\n=========================================");
 console.log("  " + PASS + " passed, " + FAIL + " failed");
 console.log("=========================================");

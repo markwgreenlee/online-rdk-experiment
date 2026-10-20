@@ -638,7 +638,9 @@ One row per jsPsych trial. Rows where `trial_kind == "rdk"` are the RDK trials;
 | `load_rt` | reaction time (ms) for the letter answer |
 | `mean_frame_ms` | mean inter-frame interval (display-timing QC) |
 | `n_frames` | number of animation frames rendered |
-| `px_per_degree` | calibration result (added to all rows) |
+| `px_per_degree` | TRUE pixels per degree used to render (§9a) |
+| `px_per_degree_reported` | the chinrest's post-scale value, pinned to `pixels_per_unit` |
+| `chinrest_scale_factor` | DOM scale the chinrest applied; true geometry = nominal / this |
 | `view_dist_mm`, `win_width_deg` | virtual-chinrest outputs |
 | `study_id`, `session_id` | Prolific `STUDY_ID` / `SESSION_ID` URL params (added to all rows) |
 
@@ -944,9 +946,10 @@ The first pilot (one participant) was collected across two displays and two
 days: **translation and rotation on a Dell secondary LCD** (day 1) and
 **spiral on a Mac Retina panel** (day 2). Viewing distance was held constant and
 each session ran the virtual-chinrest calibration, so **spatial scaling was
-matched**: reconstructing the true angular scale from the logged card-resize
-(`px2mm`) and blindspot (`view_dist_mm`) fields, all three runs subtended
-**≈39.9 px/deg** and rendered the dots at **6.0 °/s in a 7° aperture, matched to
+matched** -- or so it appeared. Reconstructing from the logged card-resize
+(`px2mm`) and blindspot (`view_dist_mm`) fields gave **≈39.9 px/deg** for all
+three runs, but that agreement is tautological and the rendered stimulus in fact
+differed by 21% across sessions (see §9a). The reconstruction gave and rendered the dots at **6.0 °/s in a 7° aperture, matched to
 0.2%**. The spiral threshold elevation is therefore *not* a stimulus-geometry
 artifact.
 
@@ -1004,6 +1007,62 @@ then a blind-spot task estimates viewing distance → **pixels-per-degree**. All
 dot sizes/speeds in `config.js` are specified in degrees and converted at run
 time. If a participant's calibration fails, a fallback `FALLBACK_PX_PER_DEGREE`
 is used (flagged in the data).
+
+---
+
+## 9a. Calibration: the chinrest scale factor and the canvas (fixed 2026-10-20)
+
+The virtual chinrest runs with `resize_units: "deg"` and `pixels_per_unit: 40`.
+Read the plugin source before trusting its outputs: it measures the display's
+true pixels-per-degree, scales `#jspsych-content` by
+
+```
+scale_factor = px2deg_measured / pixels_per_unit
+```
+
+and then reports the **post-scale** value, `px2deg = px2deg_measured /
+scale_factor`, which is therefore **exactly 40 in every run by construction**.
+It is a target, not a measurement. The true value is recovered as
+`px2deg_measured = reported_px2deg x scale_factor`.
+
+**The bug.** `plugin-rdk-load.js` deliberately attaches its canvas to
+`document.body`, *outside* the scaled wrapper, so the stimulus receives no
+scaling and its pixels are real CSS pixels. It was handed the reported 40, so
+every stimulus was drawn `1/scale_factor` too large. Across the first 11 runs
+`scale_factor` spanned 0.795-0.978, so the nominal 7 deg aperture actually
+subtended **7.2-8.8 deg** and the nominal 6 deg/s dots actually moved at
+**6.1-7.6 deg/s**.
+
+`sections.js` now derives the true value in the calibration `on_finish` and
+hands that to the canvas. Each run logs all three numbers so the record is
+unambiguous: `px_per_degree` (true, used to render), `px_per_degree_reported`
+(the post-scale 40) and `chinrest_scale_factor`.
+
+**Consequence for the existing data — read this before pooling.** Runs collected
+before this fix rendered a *larger* stimulus than nominal, by a factor that
+differed per session. Thresholds from those runs are not on the same stimulus
+scale as runs collected after it. Two things follow:
+
+- The per-run true geometry **is recoverable**: aperture = `7 / scale_factor`
+  deg, dot speed = `6 / scale_factor` deg/s, both logged. Pre-fix runs can be
+  reanalysed with true angular size as a covariate rather than discarded.
+- Note which way the confound ran. The two spiral runs have the **highest**
+  scale factors (0.978, 0.926), i.e. the *smallest* effective aperture and the
+  *slowest* effective dots -- both of which raise a coherence threshold. Part of
+  the spiral elevation reported in the pilot may therefore be stimulus size
+  rather than pattern type. It does not account for a 2.5x threshold difference
+  on its own, but it is not negligible and must be stated.
+
+This also retires a claim: section 8b previously argued that the pilot runs
+"all subtended ~39.9 px/deg ... matched to 0.2%", offered as evidence that
+spatial scaling was equated. That agreement was **tautological** -- the reported
+px2deg is pinned to `pixels_per_unit` by the plugin -- and it said nothing about
+the rendered stimulus. The real spread was 21%.
+
+`tests/verify_motion.js` pins both halves: that `on_finish` recovers
+`reported x scale_factor` (verified to FAIL on the old derivation), and that the
+plugin then renders an aperture of exactly the calibrated angular size
+(2.000-7.000 deg at 34.07 px/deg).
 
 ---
 

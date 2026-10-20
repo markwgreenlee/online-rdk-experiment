@@ -397,7 +397,10 @@ window.SECTIONS = (function () {
     type: jsPsychVirtualChinrest,
     blindspot_reps: 3,
     resize_units: "deg",
-    pixels_per_unit: 40, // placeholder; plugin computes the true value
+    // Content inside #jspsych-content is laid out at this many px per degree
+    // AFTER the plugin scales the wrapper. It is NOT the display's true
+    // px/deg -- see on_finish, which recovers that for the RDK canvas.
+    pixels_per_unit: 40,
     // The plugin's default prompt says "black square", but this study runs on a
     // black page, so the fixation target is recoloured to WHITE (see the
     // #virtual-chinrest-square rule in index.html). Keep the wording consistent.
@@ -412,14 +415,37 @@ window.SECTIONS = (function () {
       "</ol></div>" +
       "<p>Press the space bar when you are ready to begin.</p>",
     on_finish: function (data) {
-      // The plugin stores px2deg (pixels per degree) in data.
+      // CAREFUL -- `data.px2deg` is NOT the display's true pixels-per-degree.
+      // With `resize_units: "deg"` the plugin measures the real value, then
+      // scales #jspsych-content by `scale_factor = px2deg_measured /
+      // pixels_per_unit` and REPORTS the post-scale value:
+      //     reported px2deg = px2deg_measured / scale_factor == pixels_per_unit
+      // so it is 40 in every run by construction. Content inside the scaled
+      // wrapper may therefore be laid out at 40 px per degree and comes out
+      // correct.
+      //
+      // The RDK canvas is deliberately attached to document.body, OUTSIDE that
+      // wrapper (see plugin-rdk-load.js), so it receives no scaling and its
+      // pixels are real CSS pixels. Handing it the reported 40 drew every
+      // stimulus 1/scale_factor too large: across the first 11 runs the nominal
+      // 7 deg aperture was really 7.2-8.8 deg and the 6 deg/s dots 6.1-7.6
+      // deg/s. Recover the true value and give the canvas THAT.
+      //
+      //     px2deg_true = reported_px2deg * scale_factor
+      //
+      // (When no resize is applied there is no scale_factor and px2deg is
+      // already the true value, so the fallback below leaves it alone.)
+      const reported = Number(data.px2deg);
+      const sf = Number(data.scale_factor);
       const ppd =
-        data.px2deg && isFinite(data.px2deg)
-          ? data.px2deg
+        isFinite(reported) && reported > 0
+          ? (isFinite(sf) && sf > 0 ? reported * sf : reported)
           : CONFIG.FALLBACK_PX_PER_DEGREE;
       ExpBuild.setPxPerDegree(ppd);
       jsPsych.data.addProperties({
-        px_per_degree: ppd,
+        px_per_degree: ppd,                        // TRUE px/deg used to render
+        px_per_degree_reported: isFinite(reported) ? reported : null,
+        chinrest_scale_factor: isFinite(sf) ? sf : null,
         view_dist_mm: data.view_dist_mm || null,   // blindspot viewing distance
         win_width_deg: data.win_width_deg || null, // window width in degrees
         item_width_mm: data.item_width_mm || null, // card resize result
