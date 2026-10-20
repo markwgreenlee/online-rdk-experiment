@@ -84,6 +84,15 @@ MOTION_TYPES = ["translation", "rotation", "spiral", "radial"]
 ENGAGE_MIN_DROP = 0.10
 
 # preregistered QC (tune to your study)
+# Tolerance for QC comparisons. A registered floor/ceiling is INCLUSIVE: a run
+# that scores exactly the criterion meets it. Without this guard the comparison
+# is decided by binary representation error -- e.g. a low-load accuracy of
+# exactly 56/80 = 0.700 against chance 2/3 gives a* = 0.10 exactly, but the float
+# path evaluates (0.7 - 2/3)/(1 - 2/3) = 0.09999999999999998 and a strict `<`
+# excludes the run. Two of the historical runs (one rotation, one spiral) sit on
+# that exact boundary, so this is not hypothetical.
+QC_TOL = 1e-9
+
 QC = dict(
     min_test_trials=140,          # of 160
     max_fast_rt_frac=0.10,        # frac of motion RTs < 200 ms
@@ -308,11 +317,11 @@ def qc_exclusions(df):
         reasons = []
         if n < QC["min_test_trials"]:
             reasons.append(f"n_trials={n}")
-        if not np.isnan(fast_frac) and fast_frac > QC["max_fast_rt_frac"]:
+        if not np.isnan(fast_frac) and fast_frac > QC["max_fast_rt_frac"] + QC_TOL:
             reasons.append(f"fast_rt_frac={fast_frac:.2f}")
-        if not np.isnan(hi_acc) and hi_acc < QC["min_highcoh_acc"]:
+        if not np.isnan(hi_acc) and hi_acc < QC["min_highcoh_acc"] - QC_TOL:
             reasons.append(f"highcoh_acc={hi_acc:.2f}")
-        if not np.isnan(load_acc) and load_acc < QC["min_load_acc"]:
+        if not np.isnan(load_acc) and load_acc < QC["min_load_acc"] - QC_TOL:
             reasons.append(f"load_acc={load_acc:.2f}")
         # Chance-relative secondary-task floor, evaluated per load condition
         # present in the run. This is the criterion that actually has teeth on a
@@ -330,14 +339,14 @@ def qc_exclusions(df):
                 astars.append((acc_c - ch) / (1.0 - ch))
             if astars:
                 load_astar = float(np.min(astars))
-                if load_astar < QC["min_load_above_chance"]:
+                if load_astar < QC["min_load_above_chance"] - QC_TOL:
                     reasons.append(f"load_above_chance={load_astar:.2f}")
         except Exception as e:   # never silently skip a QC criterion
             raise RuntimeError(
                 f"secondary-task above-chance QC failed for {sid}: {e}") from e
         # Bias-immune low-load sensitivity floor (see QC note).
         load_dp = _low_load_dprime(g)
-        if not np.isnan(load_dp) and load_dp < QC["min_load_dprime"]:
+        if not np.isnan(load_dp) and load_dp < QC["min_load_dprime"] - QC_TOL:
             reasons.append(f"load_dprime={load_dp:.2f}")
         passed = len(reasons) == 0
         if passed:

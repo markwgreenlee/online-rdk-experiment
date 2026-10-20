@@ -998,6 +998,78 @@ control (see `analyze.py`).
 
 ---
 
+## 8c. Preregistration deviation: retroactive RSVP exclusion of pilot runs
+
+**Declared deviation.** The two secondary-task criteria `min_load_above_chance`
+(0.10) and `min_load_dprime` (0.50) were added to the QC block on **2026-10-20**,
+*after* all 11 pilot runs had been collected and their thresholds inspected.
+Applying them to those runs is therefore a post-hoc criterion change, not a
+preregistered screen, and is reported here as a deviation. All 11 runs pass the
+*original* registered QC (trial count, fast-RT fraction, high-coherence
+accuracy). Future runs are screened on the full criterion set from the outset,
+where it is preregistered rather than retroactive.
+
+**Why the criteria were added.** The original `min_load_acc = 0.55` floor sits
+*below* the low-load chance level of the legacy uniform-0-2 stream (2/3), so a
+participant who simply answered "yes" every trial scored ~0.67 and passed while
+providing no evidence of having attended the RSVP stream. That hole is harmless
+when low load is one half of a within-session contrast (the engagement gate
+catches it) but not when a run is low-load-only and RSVP accuracy is the only
+secondary-task evidence there is.
+
+**Floors are inclusive.** `min_*` criteria are met by a run that scores *exactly*
+the criterion. This is not pedantic here: two runs scored exactly 56/80 = 0.700
+on the low-load task against chance 2/3, giving `a* = 0.10` exactly -- but the
+float path evaluates `(0.7 - 2/3)/(1 - 2/3)` as `0.09999999999999998`, and a
+strict `<` excluded both. `analyze.py` now compares against a `QC_TOL = 1e-9`
+guard, which retains them. Without that guard the exclusion count is 7 and
+*every* rotation and spiral run drops out; with it the count is 5 and all four
+motion types remain represented. A borderline exclusion decided in the 17th
+decimal place is an implementation artefact, not a criterion.
+
+**Outcome: 5 of 11 runs excluded, 6 retained.**
+
+| run | type | a* | d' | verdict |
+|---|---|---|---|---|
+| ANON-3D22LCQJK5 | radial | 0.600 | 1.66 | retained |
+| ANON-7K7X2HBSP6 | translation | 0.119 | 1.11 | retained |
+| ANON-BVURHWVDWV | translation | 0.175 | 1.31 | retained |
+| ANON-CXUW28Q5TP | translation | 0.150 | 1.28 | retained |
+| ANON-MCRXCAJKBS | spiral | 0.100 | 0.89 | retained (exactly at floor) |
+| ANON-WOC135S1YF | rotation | 0.100 | 1.20 | retained (exactly at floor) |
+| ANON-6NTJC1SEY4 | translation | -0.013 | 0.78 | excluded (`load_acc`, `a*`) |
+| ANON-IDR0RVWHYH | spiral | -0.238 | 0.19 | excluded (`a*`, `d'`) |
+| ANON-IG82F27BAV | translation | 0.025 | 0.70 | excluded (`load_acc`, `a*`) |
+| ANON-U2DHR5J0W2 | rotation | 0.081 | 1.58 | excluded (`a*`) |
+| ANON-Z1AQ28UQXR | translation | 0.081 | 0.92 | excluded (`load_acc`, `a*`) |
+
+**What the exclusion does to the motion-type picture.** Low-load thr75 by type,
+before and after (`analysis/rsvp_exclusions.csv`):
+
+| type | all 11 | retained 6 |
+|---|---|---|
+| translation | 0.179 (n=6) | 0.211 (n=3) |
+| rotation | 0.116 (n=2) | 0.127 (n=1) |
+| spiral | **0.213 (n=2)** | **0.109 (n=1)** |
+| radial | 0.309 (n=1) | 0.309 (n=1) |
+
+The spiral cell moves the most, and it moves because of a single run. The
+excluded spiral run (ANON-IDR0RVWHYH) had thr75 = 0.317 with `d' = 0.19` -- no
+evidence the participant was doing the RSVP task at all. The pilot's headline
+finding that **spiral thresholds are elevated rested on that run**: with it
+removed, spiral is the *lowest* of the four types rather than the second
+highest. That reversal is not itself a result -- it is one run against one run.
+What it establishes is that the pilot ordering was never robust enough to
+interpret, which the within-type spread already indicated.
+
+**Standing caveat, unchanged and now stronger.** Three of the four types rest on
+a single run each, and motion type is still perfectly confounded with
+first-exposure order. Nothing about the ordering of types is resolvable from
+this set; see also the calibration confound in section 9a, which acts on the same
+cells. Repeated sessions per type remain the next step.
+
+---
+
 ## 9. Display calibration
 
 Online monitors differ wildly, so stimulus size in **degrees of visual angle**
