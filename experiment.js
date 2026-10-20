@@ -50,9 +50,9 @@ const study_id = jsPsych.data.getURLVariable("STUDY_ID") || "NA";
 const session_id = jsPsych.data.getURLVariable("SESSION_ID") || "NA";
 
 // Motion type for this run. A `?motion=` URL parameter overrides the config
-// default so one deployment serves translation / rotation / spiral as separate
+// default so one deployment serves translation / rotation / spiral / radial as separate
 // runs. Unknown values fall back to the config default.
-const MOTION_TYPES_VALID = ["translation", "rotation", "spiral"];
+const MOTION_TYPES_VALID = ["translation", "rotation", "spiral", "radial"];
 const motionUrl = (jsPsych.data.getURLVariable("motion") || "").toLowerCase();
 const MOTION_TYPE = MOTION_TYPES_VALID.includes(motionUrl)
   ? motionUrl
@@ -92,7 +92,7 @@ function buildBlockTrials(loadCondition) {
   const radialLevels = CONFIG.SPIRAL_RADIAL || ["expand", "contract"];
   for (const coh of CONFIG.COHERENCE_LEVELS) {
     for (const dir of MOTION_DIRECTIONS) {
-      for (let r = 0; r < CONFIG.REPS_PER_CELL; r++) {
+      for (let r = 0; r < REPS; r++) {
         if (isSpiral) {
           // Balance the radial nuisance 50/50 within each coherence x sense
           // cell: half the reps expand, half contract (alternate, then the
@@ -120,10 +120,34 @@ function buildBlockTrials(loadCondition) {
   return trials;
 }
 
+// Which load block(s) this run presents. A `?load=` URL parameter overrides the
+// config default so one deployment serves the low-load baseline and the
+// two-block load design as separate runs. Unknown values fall back to config.
+const LOAD_DESIGNS = { low: ["low"], high: ["high"], both: ["low", "high"] };
+const loadUrl = (jsPsych.data.getURLVariable("load") || "").toLowerCase();
+const LOAD_CONDITIONS = LOAD_DESIGNS[loadUrl] ||
+  (Array.isArray(CONFIG.LOAD_CONDITIONS) && CONFIG.LOAD_CONDITIONS.length
+    ? CONFIG.LOAD_CONDITIONS
+    : ["low"]);
+const SINGLE_LOAD = LOAD_CONDITIONS.length === 1;
+// With one block the freed half of the session goes back into reps, so a
+// single-load run has the SAME duration but twice the data per coherence level.
+const REPS = SINGLE_LOAD
+  ? (CONFIG.REPS_PER_CELL_SINGLE_LOAD || CONFIG.REPS_PER_CELL)
+  : CONFIG.REPS_PER_CELL;
+
 // Counterbalance which load block comes first, deterministically from the RNG.
+// Drawn even in single-load runs so the RNG stream (and therefore every
+// downstream trial list) is identical for a given seed regardless of design.
 const lowFirst = rng() < 0.5;
-const blockOrder = lowFirst ? ["low", "high"] : ["high", "low"];
-jsPsych.data.addProperties({ block_order: blockOrder.join(",") });
+const blockOrder = SINGLE_LOAD
+  ? LOAD_CONDITIONS.slice()
+  : (lowFirst ? ["low", "high"] : ["high", "low"]);
+jsPsych.data.addProperties({
+  block_order: blockOrder.join(","),
+  load_design: SINGLE_LOAD ? "single:" + LOAD_CONDITIONS[0] : "both",
+  reps_per_cell_used: REPS,
+});
 
 // Turn a spec object into a full rdk-load trial (attaching a fresh RSVP stream).
 function makeRdkTrial(spec, isPractice) {
@@ -131,6 +155,7 @@ function makeRdkTrial(spec, isPractice) {
     length: CONFIG.RSVP_LENGTH,
     target: CONFIG.RSVP_TARGET,
     maxTargets: CONFIG.RSVP_MAX_TARGETS,
+    targetPresentP: CONFIG.RSVP_TARGET_PRESENT_P,
   });
   return {
     type: jsPsychRdkLoad,
@@ -155,6 +180,7 @@ function makeRdkTrial(spec, isPractice) {
     rsvp_color: CONFIG.RSVP_COLOR,
     load_condition: spec.load_condition,
     rsvp_max_targets: CONFIG.RSVP_MAX_TARGETS,
+    rsvp_target_present_p: CONFIG.RSVP_TARGET_PRESENT_P,
     feedback: !!isPractice,
     // NOTE: jsPsych only writes the `data` object (plus fields the plugin adds
     // in finishTrial) to the saved CSV — trial *parameters* like coherence are
@@ -203,20 +229,23 @@ function trialSequence(spec, isPractice) {
 // Per-motion-type phrase for the "first say which way ..." line. Rotation and
 // spiral judge rotational sense (LEFT=CCW, RIGHT=CW); translation judges L/R.
 const _isRotMT = MOTION_TYPE === "rotation" || MOTION_TYPE === "spiral";
-const MOTION_PHRASE = _isRotMT
+const _isRadMT = MOTION_TYPE === "radial";
+const MOTION_PHRASE = _isRadMT
+  ? "<b>whether the pattern expanded or contracted</b> (\u2190 = in / \u2192 = out)"
+  : _isRotMT
   ? "<b>which way the dots were rotating</b> (\u21ba / \u21bb)"
   : "<b>which way the dots moved</b> (\u2190 / \u2192)";
 
 const loadInstructionHtml = {
   low:
-    "<h2>Letter task: EASY version</h2>" +
+    (SINGLE_LOAD ? "<h2>The letter task</h2>" : "<h2>Letter task: EASY version</h2>") +
     "<p>While you watch the dots, a quick stream of letters flashes in the centre.</p>" +
     "<p>Afterwards you'll first say " + MOTION_PHRASE + ", " +
     "then simply say whether the letter <b>" + CONFIG.RSVP_TARGET +
     "</b> appeared at all (<b>Y</b> / <b>N</b>).</p>" +
     "<p>Keep your eyes on the central cross the whole time.</p>",
   high:
-    "<h2>Letter task: HARD version</h2>" +
+    (SINGLE_LOAD ? "<h2>The letter task</h2>" : "<h2>Letter task: HARD version</h2>") +
     "<p>While you watch the dots, a quick stream of letters flashes in the centre.</p>" +
     "<p>Afterwards you'll first say " + MOTION_PHRASE + ", " +
     "then report <b>exactly how many</b> <b>" + CONFIG.RSVP_TARGET +
@@ -229,7 +258,7 @@ function loadIntro(loadCondition, blockNum) {
   const header =
     blockNum === "practice"
       ? "<h3>Practice \u2014 " + (loadCondition === "low" ? "easy" : "hard") + " letter task</h3>"
-      : "<h3>Block " + blockNum + " of 2</h3>";
+      : "<h3>Block " + blockNum + " of " + blockOrder.length + "</h3>";
   return {
     type: jsPsychHtmlButtonResponse,
     stimulus:
@@ -257,6 +286,9 @@ window.ExpBuild = {
   MOTION_DIRECTIONS,
   buildBlockTrials,
   blockOrder,
+  LOAD_CONDITIONS,
+  SINGLE_LOAD,
+  REPS,
   makeRdkTrial,
   trialSequence,
   loadIntro,

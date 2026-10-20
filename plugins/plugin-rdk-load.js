@@ -83,11 +83,12 @@ var jsPsychRdkLoad = (function (jspsych) {
       },
       motion_type: {
         type: jspsych.ParameterType.STRING,
-        default: "translation", // "translation" | "rotation" | "spiral"
+        default: "translation", // "translation" | "rotation" | "spiral" | "radial"
       },
       direction: {
         type: jspsych.ParameterType.STRING,
-        // translation: "left"/"right"; rotation & spiral: "cw"/"ccw"
+        // translation: "left"/"right"; rotation & spiral: "cw"/"ccw";
+        // radial: "expand"/"contract"
         // (the signal motion sense the participant discriminates)
         default: "right",
       },
@@ -208,6 +209,15 @@ var jsPsychRdkLoad = (function (jspsych) {
       //   spiral:      balanced 45 deg screw; equal radial & tangential
       //                components k*r each => local speed^2 = 2 k^2 r^2
       //                => <speed^2> = 2 k^2 <r^2>;  k = v / sqrt(2 <r^2>)
+      //   radial:      pure expansion/contraction at UNIFORM radial speed v
+      //                (every signal dot moves radially at v, as in Luo et al.
+      //                2026 Experiment 1) => <speed^2> = v^2 exactly, and
+      //                identically for both signs, so a measured
+      //                expansion-vs-contraction difference cannot be a
+      //                motion-energy artifact. Note this is NOT the spiral's
+      //                radial component (which is scale-invariant k*r); the
+      //                uniform field is chosen because it equates the two
+      //                radial signs to each other, which the k*r field does not.
       const motionType = trial.motion_type || "translation";
       const meanR2 = (rOuter * rOuter + rInner * rInner) / 2; // px^2
       const vPxPerMs = speedPxPerMs; // translation reference speed
@@ -220,6 +230,8 @@ var jsPsychRdkLoad = (function (jspsych) {
       const dirSign = trial.direction === "right" ? 1 : -1; // translation
       const signCW = trial.direction === "cw" ? 1 : -1; // +1 = clockwise
       const signExp = trial.radial_direction === "contract" ? -1 : 1; // +1 = expand
+      // radial type: the JUDGED axis is the radial sign, carried in `direction`
+      const signRad = trial.direction === "contract" ? -1 : 1; // +1 = expand
 
       // ---------------- canvas fills the viewport ----------------
       // The CSS box AND the drawing buffer must both cover the full viewport.
@@ -382,6 +394,20 @@ var jsPsychRdkLoad = (function (jspsych) {
               dots[i].x = x * c - y * s;
               dots[i].y = x * s + y * c;
               // radius is invariant, so it stays in the annulus; no respawn
+            } else if (motionType === "radial") {
+              // pure expansion/contraction: translate along the radius at the
+              // uniform speed v (no angular component, no radial gradient)
+              const x = dots[i].x, y = dots[i].y;
+              const rr = Math.hypot(x, y);
+              if (rr > 0) {
+                const f = (rr + signRad * stepPx) / rr;
+                dots[i].x = x * f;
+                dots[i].y = y * f;
+              }
+              if (!inAnnulus(dots[i].x, dots[i].y)) {
+                // crossed the inner or outer boundary -> respawn
+                dots[i] = randPointInAnnulus();
+              }
             } else if (motionType === "spiral") {
               // balanced screw: rotate AND scale radius exponentially
               const x = dots[i].x, y = dots[i].y;
@@ -476,12 +502,26 @@ var jsPsychRdkLoad = (function (jspsych) {
       // counter-clockwise, RIGHT arrow = clockwise. Translation keeps
       // LEFT = left, RIGHT = right.
       const isRot = motionType === "rotation" || motionType === "spiral";
+      // Radial keeps the SAME two keys as every other motion type so that motor
+      // demands are identical across runs and cannot confound the cross-type
+      // threshold contrast. Neither arrow is spatially congruent with a radial
+      // sign, so the glyphs carry the mapping: inward-pointing arrows for
+      // contracting, outward-pointing for expanding.
+      const isRadial = motionType === "radial";
       const askMotion = () => {
-        const question = isRot
+        const question = isRadial
+          ? "Was the pattern expanding or contracting?"
+          : isRot
           ? "Which way were the dots rotating overall?"
           : "Which way were the dots moving overall?";
-        const glyphs = isRot ? "&#x21ba; &nbsp; &#x21bb;" : "&larr; &nbsp; &rarr;";
-        const legend = isRot
+        const glyphs = isRadial
+          ? "&rarr;&larr; &nbsp; &larr;&nbsp;&rarr;"
+          : isRot
+          ? "&#x21ba; &nbsp; &#x21bb;"
+          : "&larr; &nbsp; &rarr;";
+        const legend = isRadial
+          ? "Left arrow = contracting (inward) &nbsp;&nbsp; Right arrow = expanding (outward)"
+          : isRot
           ? "Left arrow = counter-clockwise &nbsp;&nbsp; Right arrow = clockwise"
           : "Left arrow = left &nbsp;&nbsp; Right arrow = right";
         display_element.innerHTML =
@@ -506,7 +546,9 @@ var jsPsychRdkLoad = (function (jspsych) {
         // map the key to the judged axis for this motion type.
         // Rotational sense: LEFT arrow = counter-clockwise, RIGHT arrow =
         // clockwise (the arrow points the way the top of the pattern moves).
-        const respDir = isRot
+        const respDir = isRadial
+          ? isLeft ? "contract" : "expand"
+          : isRot
           ? isLeft ? "ccw" : "cw"
           : isLeft ? "left" : "right";
         trialData.motion_response = respDir;

@@ -20,34 +20,61 @@ window.SECTIONS = (function () {
 
   /* ---------------- motion-type vocabulary (per run) ----------------
    * The instruction / quiz / debrief wording must match the motion type of
-   * this run (translation vs. rotation vs. spiral), which is fixed at page
+   * this run (translation / rotation / spiral / radial), which is fixed at page
    * load in experiment.js. Everything task-facing pulls from this one object
    * so no screen can drift from the actual stimulus + response mapping.
    */
   const MT = (window.ExpBuild && window.ExpBuild.MOTION_TYPE) || "translation";
   const isRot = MT === "rotation" || MT === "spiral";
+  const isRad = MT === "radial";
+  const pick = (rad, rot, tra) => (isRad ? rad : isRot ? rot : tra);
   const V = {
     // short verb for the coherent motion
-    verb: isRot ? "rotate together" : "drift together",
+    verb: pick("move outward or inward together", "rotate together", "drift together"),
     // the two response alternatives, human-readable
-    alts: isRot
-      ? "<b>counter-clockwise</b> or <b>clockwise</b>"
-      : "<b>left</b> or <b>right</b>",
-    // arrow glyphs shown for the response keys (CCW glyph then CW glyph)
-    glyphs: isRot ? "\u21ba / \u21bb" : "\u2190 / \u2192",
-    // key legend: LEFT arrow = counter-clockwise, RIGHT arrow = clockwise
-    keyLegend: isRot
-      ? "press <b>\u2190</b> (counter-clockwise) or <b>\u2192</b> (clockwise)"
-      : "press <b>\u2190</b> or <b>\u2192</b>",
+    alts: pick(
+      "<b>outward</b> (expanding) or <b>inward</b> (contracting)",
+      "<b>counter-clockwise</b> or <b>clockwise</b>",
+      "<b>left</b> or <b>right</b>"
+    ),
+    // arrow glyphs shown for the response keys (LEFT glyph then RIGHT glyph)
+    glyphs: pick("\u2192\u2190 / \u2190\u2009\u2192", "\u21ba / \u21bb", "\u2190 / \u2192"),
+    // key legend: LEFT arrow first, RIGHT arrow second
+    keyLegend: pick(
+      "press <b>\u2190</b> (contracting / inward) or <b>\u2192</b> (expanding / outward)",
+      "press <b>\u2190</b> (counter-clockwise) or <b>\u2192</b> (clockwise)",
+      "press <b>\u2190</b> or <b>\u2192</b>"
+    ),
     // noun for what is judged
-    judged: isRot ? "rotation direction" : "left/right direction",
+    judged: pick("expansion/contraction", "rotation direction", "left/right direction"),
     // past-tense phrase for debrief/load-intro ("which way the dots ...")
-    moved: isRot ? "which way the dots were rotating" : "which way the dots moved",
+    moved: pick(
+      "whether the pattern expanded or contracted",
+      "which way the dots were rotating",
+      "which way the dots moved"
+    ),
     // quiz correct-answer label
-    quizJudged: isRot
-      ? "Their overall clockwise/counter-clockwise rotation"
-      : "Their overall left/right direction",
+    quizJudged: pick(
+      "Whether the pattern was expanding or contracting overall",
+      "Their overall clockwise/counter-clockwise rotation",
+      "Their overall left/right direction"
+    ),
   };
+  // The letter-task sentence depends on whether this run manipulates load.
+  // A single-load run must not promise that the question "changes between
+  // blocks" -- it does not.
+  const _singleLoad =
+    (window.ExpBuild && window.ExpBuild.SINGLE_LOAD) !== false;
+  const _loadCond =
+    (window.ExpBuild && window.ExpBuild.LOAD_CONDITIONS &&
+      window.ExpBuild.LOAD_CONDITIONS[0]) || "low";
+  const LOAD_Q = !_singleLoad
+    ? "a question about the letters that flashed on the cross " +
+      "(this changes between blocks \u2014 we'll tell you which version each time)"
+    : _loadCond === "low"
+    ? "whether the letter <b>X</b> appeared in the stream at all (<b>Y</b> / <b>N</b>)"
+    : "<b>how many</b> <b>X</b>s appeared in the stream";
+
   // spiral gets an extra note that the pattern also expands/contracts but only
   // the rotational sense is judged.
   const spiralNote =
@@ -411,8 +438,7 @@ window.SECTIONS = (function () {
         "<h2>The two questions</h2>" +
         "<p>After the dots stop, you'll answer:</p>" +
         "<ol><li><b>Direction:</b> " + V.keyLegend + " for the overall " + V.judged + ".</li>" +
-        "<li><b>Letters:</b> a question about the letters that flashed on the cross " +
-        "(this changes between blocks \u2014 we'll tell you which version each time).</li></ol>" +
+        "<li><b>Letters:</b> " + LOAD_Q + "</li></ol>" +
         "<p>Answer as accurately as you can. Speed matters less than accuracy.</p></div>",
       "<div style='max-width:640px;margin:auto;text-align:left;'>" +
         "<h2>Sometimes it's hard</h2>" +

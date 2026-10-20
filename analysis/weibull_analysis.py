@@ -7,6 +7,8 @@ RDK + attentional-load study, comparing the "easy" (low-load) and "hard"
 Motion types.  The experiment runs three motion types as separate runs:
     translation  -> direction coded left / right
     rotation     -> direction coded cw / ccw   (rigid fronto-parallel rotation)
+    radial       -> direction coded expand / contract (pure expansion/contraction
+                    at uniform radial speed; the radial sign IS the judged axis)
     spiral       -> direction coded cw / ccw   (balanced screw; radial sign is a
                                                 balanced logged nuisance)
 The psychometric machinery is direction-agnostic: it fits `motion_correct`, so
@@ -21,13 +23,17 @@ It also runs two manipulation checks that only matter once direction is coded
 cw/ccw and the spiral carries a radial nuisance:
   * direction bias  -- accuracy split by the two response directions, to catch a
                        participant biased toward one sense (e.g. always "cw").
+  * radial signs    -- for the radial type, separate psychometric fits for
+                       expanding vs contracting trials and a bootstrapped
+                       threshold difference (radial_sign_thresholds.csv,
+                       radial_sign_diff.csv)
   * spiral radial   -- accuracy split by expand/contract, to confirm the
                        (unjudged) radial sign does not shift rotational-sense
                        discrimination.
 
 Usage:
     python weibull_analysis.py path/to/data.csv [--out OUTDIR]
-                               [--motion-type translation|rotation|spiral]
+                               [--motion-type translation|rotation|spiral|radial]
 
 Model (per condition), fit by maximum likelihood (binomial):
     p(c) = gamma + (1 - gamma - lambda) * (1 - exp(-(c/alpha)^beta))
@@ -52,12 +58,14 @@ MOTION_TASK_LABEL = {
     "translation": "Left/right discrimination",
     "rotation":    "CW/CCW discrimination",
     "spiral":      "CW/CCW discrimination (spiral)",
+    "radial":      "Expansion/contraction discrimination",
 }
 # The two direction codes each type uses, in a fixed order for stable tables.
 MOTION_DIR_CODES = {
     "translation": ["left", "right"],
     "rotation":    ["ccw", "cw"],
     "spiral":      ["ccw", "cw"],
+    "radial":      ["contract", "expand"],
 }
 
 def weibull(c, alpha, beta, lapse, guess=GUESS):
@@ -113,6 +121,43 @@ def bootstrap_threshold(sub, nboot=2000, seed=0, target=0.75):
         except Exception:
             pass
     return np.asarray(out)
+
+def rsvp_design(df):
+    """(P(stream contains >=1 target), max targets) from the LOGGED DESIGN.
+
+    Not estimated from the realised streams: max_k P_hat(k) is upward-biased for
+    max_k P(k), so a sample-based chance level would drift with block size and
+    deflate a*. `rsvp_target_present_p` is logged from config.js v1.1.0 onward;
+    older uniform-over-0..max runs imply max_t/(max_t+1), which reproduces the
+    original 2/3 (low) and 1/3 (high) chance levels exactly.
+    """
+    max_t = np.nan
+    if "rsvp_max_targets" in df:
+        v = pd.to_numeric(df["rsvp_max_targets"], errors="coerce").dropna()
+        if len(v):
+            max_t = int(v.iloc[0])
+    if not np.isfinite(max_t) or max_t < 1:
+        nt = pd.to_numeric(df.get("rsvp_n_targets"), errors="coerce")
+        max_t = int(np.nanmax(nt)) if nt is not None and nt.notna().any() else 2
+        max_t = max(int(max_t), 1)
+    p_pres = np.nan
+    if "rsvp_target_present_p" in df:
+        v = pd.to_numeric(df["rsvp_target_present_p"], errors="coerce").dropna()
+        if len(v):
+            p_pres = float(v.iloc[0])
+    if not np.isfinite(p_pres):
+        p_pres = max_t / (max_t + 1.0)
+    return float(np.clip(p_pres, 0.0, 1.0)), int(max_t)
+
+
+def chance_for(df, load):
+    """Best accuracy achievable by a CONSTANT response on the secondary task."""
+    p_pres, max_t = rsvp_design(df)
+    if load == "low":      # "did an X appear?"  -> always-yes vs always-no
+        return max(p_pres, 1.0 - p_pres)
+    # "how many Xs?" -> best single count answer
+    return max(1.0 - p_pres, p_pres / max_t if max_t else 1.0)
+
 
 def to_bool(s):
     return s.astype(str).str.lower().isin(["true", "1", "1.0"])
@@ -360,13 +405,14 @@ def analyze_secondary_task(rdk, conds, labels, colors, outdir, nboot=3000, prefi
     # empirical chance per condition: low = 'always-yes' base rate; high = 0.25 guess
     chance = {}
     if "low" in conds:
-        chance["low"] = float((rdk[rdk.load_condition == "low"].rsvp_n_targets >= 1).mean())
+        chance["low"] = chance_for(rdk, "low")
     if "high" in conds:
-        # counting task guess rate = 1 / (number of response options).
-        # Options are 0..max_targets, derived from the data so it tracks the
-        # RSVP_MAX_TARGETS setting used to collect this run (0-3 -> 0.25; 0-2 -> 0.333).
-        max_t = int(np.nanmax(rdk[rdk.load_condition == "high"].rsvp_n_targets))
-        chance["high"] = 1.0 / (max_t + 1)
+        # Counting-task chance = best accuracy from a CONSTANT answer, i.e. the
+        # modal count's share, read from this run's own target distribution.
+        # Under uniform 0..max streams that equals the old 1/(max+1); under 50%
+        # target prevalence it is P(no target) = 0.5, and assuming 1/(max+1)
+        # there would credit an "always answer 0" responder with a* = +0.25.
+        chance["high"] = chance_for(rdk, "high")
     logit = {lc: fit_rsvp_logit(rdk[rdk.load_condition == lc]) for lc in conds}
     boots = {lc: bootstrap_rsvp_slope(rdk[rdk.load_condition == lc], nboot=nboot) for lc in conds}
     rows = []
@@ -409,6 +455,50 @@ def direction_bias_table(sub, motion_type):
                          accuracy=float(g["motion_correct"].mean()),
                          chose_this_dir_rate=picked))
     return pd.DataFrame(rows)
+
+
+def radial_sign_thresholds(sub, nboot=2000):
+    """RADIAL only: fit the psychometric function SEPARATELY to expanding and
+    contracting trials and bootstrap the threshold difference.
+
+    For the radial motion type the expand/contract sign IS the judged axis, so
+    this is the direct coherence-axis analogue of the speed-discrimination
+    anisotropy reported by Luo, Ashida, Yokoi & Takemura (2026, J Vis 26(10):18),
+    who found contraction MORE sensitive than expansion at 4 and 16 deg/s --
+    the band containing this experiment's 6 deg/s dot speed.
+
+    Note the two measures are not numerically comparable (they vary speed at full
+    coherence; we vary coherence at fixed speed), so this tests only whether an
+    anisotropy of the same SIGN appears on the coherence axis.
+
+    Returns (table, diff_row). Positive `diff` = expansion threshold higher =
+    contraction more sensitive = same direction as their result.
+    """
+    rows, boots = [], {}
+    for sign in ("expand", "contract"):
+        g = sub[sub["direction"] == sign]
+        if g.empty or g.coherence.nunique() < 3:
+            continue
+        f = fit_condition(g)
+        b = bootstrap_threshold(g, nboot=nboot, seed=hash(sign) % 2**31)
+        boots[sign] = np.asarray(b[0] if isinstance(b, tuple) else b, dtype=float)
+        rows.append(dict(sign=sign, n_trials=int(len(g)), alpha=f["alpha"],
+                         beta=f["beta"], lapse=f["lapse"], thr75=f["thr75"],
+                         accuracy=float(g.motion_correct.mean())))
+    tab = pd.DataFrame(rows)
+    diff = {}
+    if {"expand", "contract"} <= boots.keys():
+        m = min(len(boots["expand"]), len(boots["contract"]))
+        if m > 50:
+            d = boots["expand"][:m] - boots["contract"][:m]
+            diff = dict(contrast="expand - contract",
+                        diff_median=float(np.median(d)),
+                        ci_lo=float(np.percentile(d, 2.5)),
+                        ci_hi=float(np.percentile(d, 97.5)),
+                        frac_boot_positive=float(np.mean(d > 0)),
+                        excludes_zero=bool(np.percentile(d, 2.5) > 0 or
+                                           np.percentile(d, 97.5) < 0))
+    return tab, pd.DataFrame([diff]) if diff else pd.DataFrame()
 
 
 def spiral_radial_table(sub):
@@ -463,12 +553,9 @@ def rsvp_load_sanity(rdk_t, motion_type, conds):
         n = int(len(sub))
         # empirical chance for this load condition (mirrors analyze_secondary_task)
         if lc == "low":
-            ch = float((sub.rsvp_n_targets >= 1).mean()) if "rsvp_n_targets" in sub.columns else 0.5
+            ch = chance_for(rdk_t, "low")
         else:
-            if "rsvp_n_targets" in sub.columns and sub.rsvp_n_targets.notna().any():
-                ch = 1.0 / (int(np.nanmax(sub.rsvp_n_targets)) + 1)
-            else:
-                ch = 0.25
+            ch = chance_for(rdk_t, "high")
         above = (acc - ch) / (1.0 - ch) if ch < 1.0 else np.nan
         # binomial 95% CI on raw accuracy (normal approx, floored at n>0)
         se = np.sqrt(acc * (1 - acc) / n) if n > 0 else np.nan
@@ -599,6 +686,20 @@ def analyze_one_type(rdk_t, motion_type, args, prefix):
     dbias.to_csv(os.path.join(args.out, prefix + "direction_bias.csv"), index=False)
     print("Direction bias (accuracy + choice rate by sign):")
     print(dbias.to_string(index=False))
+    if motion_type == "radial":
+        rtab, rdiff = radial_sign_thresholds(rdk_t, nboot=max(args.nboot, 2000))
+        if not rtab.empty:
+            rtab.insert(0, "motion_type", motion_type)
+            rtab.to_csv(os.path.join(args.out, prefix + "radial_sign_thresholds.csv"),
+                        index=False)
+            print("Radial sign thresholds (expansion vs contraction, collapsed across load):")
+            print(rtab.to_string(index=False))
+        if not rdiff.empty:
+            rdiff.to_csv(os.path.join(args.out, prefix + "radial_sign_diff.csv"), index=False)
+            r0 = rdiff.iloc[0]
+            print("  expand - contract 75%%-threshold: median=%.3f 95%% CI [%.3f, %.3f] "
+                  "(positive = contraction more sensitive, i.e. same direction as "
+                  "Luo et al. 2026)" % (r0.diff_median, r0.ci_lo, r0.ci_hi))
     if motion_type == "spiral":
         srad = spiral_radial_table(rdk_t)
         if not srad.empty:
@@ -615,7 +716,7 @@ def main():
     ap.add_argument("--out", default=".")
     ap.add_argument("--nboot", type=int, default=2000)
     ap.add_argument("--motion-type", dest="motion_type", default=None,
-                    choices=["translation", "rotation", "spiral"],
+                    choices=["translation", "rotation", "spiral", "radial"],
                     help="analyse only this motion type (default: every type in the data)")
     ap.add_argument("--photometry", default="display_photometry.json",
                     help="lab endpoint-luminance file (cd/m^2); used to annotate "
@@ -633,7 +734,7 @@ def main():
         if not types_present:
             raise SystemExit("No rows with motion_type == %r in this file." % args.motion_type)
     # stable order translation, rotation, spiral, then anything else
-    order = {"translation": 0, "rotation": 1, "spiral": 2}
+    order = {"translation": 0, "rotation": 1, "spiral": 2, "radial": 3}
     types_present.sort(key=lambda t: order.get(t, 99))
 
     single = len(types_present) == 1

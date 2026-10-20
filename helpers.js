@@ -58,9 +58,10 @@ function randChoice(rng, arr) {
 
 /* --------------------------- RSVP stream gen --------------------------- */
 // Distractor alphabet: consonants, excluding the target and easily-confused
-// glyphs (I/O/Q). The stream contains 0..maxTargets copies of the target,
-// drawn with equal probability so the count distribution is identical across
-// load conditions. This same generator feeds BOTH low- and high-load trials.
+// glyphs (I/O/Q). The stream contains 0..maxTargets copies of the target. The
+// count distribution is set by `targetPresentP` (see below) and is IDENTICAL
+// across load conditions -- this same generator feeds BOTH low- and high-load
+// trials, so only the participant's TASK on the stream differs.
 const RSVP_DISTRACTORS = "BCDFGHJKLMNPRSTUVWZ".split("");
 
 function makeRsvpStream(rng, opts) {
@@ -68,9 +69,24 @@ function makeRsvpStream(rng, opts) {
     length = 10,
     target = "X",
     maxTargets = 3,
+    targetPresentP = null,
   } = opts || {};
-  // choose how many targets (uniform over 0..maxTargets)
-  const nTargets = randInt(rng, 0, maxTargets);
+  // How many targets this stream contains.
+  //   targetPresentP == null -> legacy: uniform over 0..maxTargets. With
+  //     maxTargets=2 that puts a target in 2/3 of streams, so "always yes" on
+  //     the low-load task scores 0.67 without attending to the stream at all.
+  //   targetPresentP set     -> a target is PRESENT with that probability, and
+  //     the count is then uniform over 1..maxTargets. At 0.5 the low-load task
+  //     reaches its floor: always-yes and always-no both score exactly 0.5.
+  // See README section 6d for the full gameability argument -- lowering
+  // prevalence also RAISES the best constant answer on the high-load counting
+  // task (to P(no target)), which the analysis chance rule accounts for.
+  const nTargets =
+    targetPresentP === null || targetPresentP === undefined
+      ? randInt(rng, 0, maxTargets)
+      : rng() < targetPresentP
+      ? randInt(rng, 1, maxTargets)
+      : 0;
   // pick distinct positions for targets (targets never adjacent-forced, just
   // distinct slots); avoid the first and last slot so onset/offset transients
   // don't hide a target.

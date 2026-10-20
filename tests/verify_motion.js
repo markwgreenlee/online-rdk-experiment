@@ -221,6 +221,38 @@ function spiralMeasure(dir, radial) {
     "radial=" + expCW.radial.toFixed(4) + " tang=" + expCW.tang.toFixed(4));
 }
 
+// =================================================================== RADIAL
+console.log("\n[radial]");
+function radialMeasure(dir) {
+  const { frames } = runTrial({ ...baseTrial, motion_type: "radial", direction: dir });
+  const f0 = frames[0], f1 = frames[1];
+  const dr = [], dth = [];
+  for (let i = 0; i < f0.length; i++) {
+    const a = toPolar(f0[i]), b = toPolar(f1[i]);
+    const dthi = angDiff(b.th, a.th);
+    // exclude respawned dots (random relocation -> large radius or angle jump)
+    if (Math.abs(b.r - a.r) > 3 * (SPEED_DPS * PPD / 1000) * FRAME_MS) continue;
+    if (Math.abs(dthi) > 1e-6) continue;
+    dr.push(b.r - a.r);
+    dth.push(dthi);
+  }
+  return { dr: mean(dr), dth: mean(dth), n: dr.length };
+}
+{
+  const step = (SPEED_DPS * PPD / 1000) * FRAME_MS; // px per frame
+  const ex = radialMeasure("expand");
+  check("expand increases radius", ex.dr > 0, "dr=" + ex.dr.toFixed(5));
+  const co = radialMeasure("contract");
+  check("contract decreases radius", co.dr < 0, "dr=" + co.dr.toFixed(5));
+  check("radial has NO angular component", Math.abs(ex.dth) < 1e-9 && Math.abs(co.dth) < 1e-9,
+    "dth=" + ex.dth.toExponential(2));
+  check("radial step == uniform reference speed (expand)",
+    Math.abs(ex.dr - step) / step < 0.01, "dr=" + ex.dr.toFixed(5) + " exp " + step.toFixed(5));
+  check("radial step == uniform reference speed (contract)",
+    Math.abs(-co.dr - step) / step < 0.01, "dr=" + co.dr.toFixed(5) + " exp " + (-step).toFixed(5));
+  check("expand and contract are mirror images", Math.abs(ex.dr + co.dr) < 1e-6);
+}
+
 // ==================================================== RMS SPEED MATCHING
 console.log("\n[motion-energy matching]");
 function rmsSpeed(trial) {
@@ -237,11 +269,20 @@ function rmsSpeed(trial) {
   const tr = rmsSpeed({ ...baseTrial, motion_type: "translation", direction: "right" });
   const ro = rmsSpeed({ ...baseTrial, motion_type: "rotation", direction: "cw" });
   const sp = rmsSpeed({ ...baseTrial, motion_type: "spiral", direction: "cw", radial_direction: "expand" });
-  console.log("  RMS speed px/ms  translation=" + tr.toFixed(4) + " rotation=" + ro.toFixed(4) + " spiral=" + sp.toFixed(4));
+  const rdE = rmsSpeed({ ...baseTrial, motion_type: "radial", direction: "expand" });
+  const rdC = rmsSpeed({ ...baseTrial, motion_type: "radial", direction: "contract" });
+  console.log("  RMS speed px/ms  translation=" + tr.toFixed(4) + " rotation=" + ro.toFixed(4) +
+    " spiral=" + sp.toFixed(4) + " radial(exp)=" + rdE.toFixed(4) + " radial(con)=" + rdC.toFixed(4));
   const target = SPEED_DPS * PPD / 1000;
   check("translation RMS == reference speed", Math.abs(tr - target) / target < 0.02);
   check("rotation RMS matches translation", Math.abs(ro - tr) / tr < 0.05, "ratio=" + (ro / tr).toFixed(4));
   check("spiral RMS matches translation", Math.abs(sp - tr) / tr < 0.05, "ratio=" + (sp / tr).toFixed(4));
+  check("radial expand RMS matches translation", Math.abs(rdE - tr) / tr < 0.05, "ratio=" + (rdE / tr).toFixed(4));
+  check("radial contract RMS matches translation", Math.abs(rdC - tr) / tr < 0.05, "ratio=" + (rdC / tr).toFixed(4));
+  // The two radial signs must match EACH OTHER tightly: an energy difference
+  // between them would masquerade as the expansion/contraction effect.
+  check("radial expand == radial contract (both signs equated)",
+    Math.abs(rdE - rdC) / rdC < 0.02, "ratio=" + (rdE / rdC).toFixed(4));
 }
 
 // ============================================== RESPONSE MAPPING + SCORING
@@ -299,6 +340,15 @@ function runResponse(trial, keyPressed) {
   // spiral shares the rotational mapping
   const sL = runResponse({ ...baseTrial, motion_type: "spiral", direction: "ccw", radial_direction: "expand" }, "ArrowLeft");
   check("spiral LEFT -> ccw", sL.ok && sL.resp === "ccw", "resp=" + (sL.resp));
+  // radial: LEFT arrow = contract, RIGHT arrow = expand
+  const dL = runResponse({ ...baseTrial, motion_type: "radial", direction: "contract" }, "ArrowLeft");
+  check("radial LEFT -> contract", dL.ok && dL.resp === "contract", "resp=" + (dL.resp));
+  check("radial LEFT correct when signal=contract", dL.correct === true);
+  const dR = runResponse({ ...baseTrial, motion_type: "radial", direction: "expand" }, "ArrowRight");
+  check("radial RIGHT -> expand", dR.ok && dR.resp === "expand", "resp=" + (dR.resp));
+  check("radial RIGHT correct when signal=expand", dR.correct === true);
+  const dWrong = runResponse({ ...baseTrial, motion_type: "radial", direction: "expand" }, "ArrowLeft");
+  check("radial LEFT incorrect when signal=expand", dWrong.correct === false);
   // translation keeps LEFT=left, RIGHT=right
   const tL = runResponse({ ...baseTrial, motion_type: "translation", direction: "left" }, "ArrowLeft");
   check("translation LEFT -> left", tL.ok && tL.resp === "left", "resp=" + (tL.resp));

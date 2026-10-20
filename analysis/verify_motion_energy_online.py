@@ -1,6 +1,6 @@
 """
 verify_motion_energy_online.py — Independent check that translation / rotation /
-spiral are equated for MOTION ENERGY in the flat online RDK, the online analog of
+spiral / radial are equated for MOTION ENERGY in the flat online RDK, the online analog of
 the desktop pipeline's verify_motion_energy.py.
 
 The desktop experiment equates a kinematic ME proxy <area * speed^2> over visible
@@ -12,6 +12,7 @@ the proxy reduces to the area-weighted <speed^2> across the annulus. The plugin
     translation: every signal dot moves at v      -> <speed^2> = v^2
     rotation:    omega = v / sqrt(<r^2>)           -> <speed^2> = omega^2<r^2> = v^2
     spiral:      k = v / sqrt(2<r^2>) (45deg screw) -> <speed^2> = 2k^2<r^2>   = v^2
+    radial:      uniform radial speed v            -> <speed^2> = v^2 (both signs)
 
 This script re-measures <speed^2> per type by Monte-Carlo, reproducing the
 plugin's DISCRETE per-frame update (finite step + annulus respawn), so it catches
@@ -70,6 +71,15 @@ def signal_speed2(mtype, n=N, seed=0):
     elif mtype == "spiral":
         a = K * dt; c, s = np.cos(a), np.sin(a); rf = 1 + K * dt
         x2, y2 = (x * c - y * s) * rf, (x * s + y * c) * rf
+    elif mtype in ("radial", "radial_expand", "radial_contract"):
+        # pure expansion/contraction at UNIFORM radial speed v: translate each
+        # dot along its own radius by exactly V*dt. Sign is the judged axis, so
+        # BOTH signs are measured (an energy difference between them would
+        # masquerade as the expansion/contraction effect being tested).
+        sign = -1.0 if mtype == "radial_contract" else 1.0
+        r = np.hypot(x, y)
+        f = (r + sign * V * dt) / np.where(r > 0, r, 1.0)
+        x2, y2 = x * f, y * f
     else:
         raise ValueError(mtype)
     keep = _in_annulus(x2, y2)
@@ -85,17 +95,18 @@ def verify(tol=ME_TOL):
     print(f"  omega={OMEGA:.4f} rad/s | k={K:.4f} /s | tol={tol*100:.0f}%\n")
     ref = None
     rows = {}
-    for mt in ["translation", "rotation", "spiral"]:
+    for mt in ["translation", "rotation", "spiral",
+               "radial_expand", "radial_contract"]:
         s2, msp, kept = signal_speed2(mt)
         if ref is None:
             ref = s2
         rows[mt] = (s2, msp, kept, (s2 - ref) / ref)
-    print(f"  {'type':11s} {'<speed^2>':>10s} {'RMS':>7s} {'mean':>7s} {'dev':>8s}  kept")
+    print(f"  {'type':16s} {'<speed^2>':>10s} {'RMS':>7s} {'mean':>7s} {'dev':>8s}  kept")
     all_ok = True
     for mt, (s2, msp, kept, dev) in rows.items():
         ok = abs(dev) <= tol
         all_ok &= ok
-        print(f"  {mt:11s} {s2:10.3f} {np.sqrt(s2):7.3f} {msp:7.3f} "
+        print(f"  {mt:16s} {s2:10.3f} {np.sqrt(s2):7.3f} {msp:7.3f} "
               f"{dev*100:+7.2f}% {'OK' if ok else 'CHECK':>5s}  {kept*100:4.1f}%")
     print(f"\n  Signal ME {'matched across all types' if all_ok else 'EXCEEDS tolerance'} "
           f"(max |dev| = {max(abs(r[3]) for r in rows.values())*100:.2f}%).")

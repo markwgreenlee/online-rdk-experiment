@@ -47,7 +47,9 @@
           E.MOTION_TYPE === "spiral"
             ? RH.randChoice(rng, CONFIG.SPIRAL_RADIAL)
             : null,
-        load_condition: i % 2 === 0 ? "low" : "high",
+        // practice samples only the load condition(s) this run actually uses
+        load_condition:
+          E.LOAD_CONDITIONS[i % E.LOAD_CONDITIONS.length],
       };
       if (spec.load_condition === "low" && !taughtLow) {
         timeline.push(E.loadIntro("low", "practice"));

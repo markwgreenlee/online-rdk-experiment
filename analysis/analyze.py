@@ -55,7 +55,7 @@ COLS = dict(
     load_correct="load_correct",
     load_rt="load_rt",
     n_targets="rsvp_n_targets",
-    motion_type="motion_type",   # "translation" | "rotation" | "spiral"
+    motion_type="motion_type",   # "translation" | "rotation" | "spiral" | "radial"
     # display-provenance fields (logged by the virtual-chinrest calibration)
     px2mm="px2mm",               # physical pixel size (px per mm) — display-specific
     view_dist_mm="view_dist_mm", # blindspot viewing distance
@@ -73,7 +73,7 @@ THRESHOLD_P = 0.75   # target performance level for the threshold
 
 # Motion types, in canonical order. Runs are collected separately (one URL
 # parameter per run) but may arrive as several CSVs per participant.
-MOTION_TYPES = ["translation", "rotation", "spiral"]
+MOTION_TYPES = ["translation", "rotation", "spiral", "radial"]
 
 # Standing load-engagement gate (mirrors weibull_analysis.py). A run whose
 # secondary-task performance ABOVE ITS OWN CHANCE does not drop by at least this
@@ -88,7 +88,28 @@ QC = dict(
     min_test_trials=140,          # of 160
     max_fast_rt_frac=0.10,        # frac of motion RTs < 200 ms
     min_highcoh_acc=0.65,         # accuracy at the two highest coherences
-    min_load_acc=0.55,            # secondary-task accuracy floor (engagement)
+    min_load_acc=0.55,            # secondary-task RAW accuracy floor (crude backstop)
+    # Secondary-task floor expressed ABOVE CHANCE. The raw 0.55 floor is not a
+    # usable criterion for the low-load task: with RSVP_MAX_TARGETS=2 and
+    # uniform 0..2 targets, P(at least one X) = 2/3, so an participant who
+    # simply answers "yes" every trial scores ~0.67 and sails past a 0.55 floor
+    # while providing no evidence of having attended the stream at all. That
+    # hole is harmless when low load is one half of a contrast (the engagement
+    # gate catches it) but NOT when a run is low-load-only and the RSVP accuracy
+    # is the only secondary-task evidence there is. This criterion uses the same
+    # normalized above-chance score as the engagement gate,
+    # a* = (acc - chance) / (1 - chance), with each condition's own chance.
+    min_load_above_chance=0.10,
+    # Low-load sensitivity floor, d' (log-linear corrected). The above-chance
+    # criterion is bias-SENSITIVE: a participant who answers "yes" on every
+    # trial scores a* = 0 only in expectation, and sampling noise in the stream
+    # lets them clear a 0.10 floor ~12% of the time in a 160-trial run (~16% at
+    # the legacy 2/3 prevalence). d' is immune to response bias by construction
+    # -- hit = false-alarm implies d' = 0 exactly, whatever the prevalence --
+    # so it catches the all-yes voter deterministically. Only defined for the
+    # low-load yes/no detection task; the high-load counting task keeps a*.
+    # Calibration: the first pilot run scores d' = 1.11 (hit 0.74, FA 0.32).
+    min_load_dprime=0.50,
 )
 
 
@@ -175,6 +196,103 @@ def to_trials(raw):
     return df
 
 
+def _low_load_dprime(g):
+    """Log-linear corrected d' on the LOW-load yes/no detection task.
+
+    hit = P(said "yes" | >=1 target), fa = P(said "yes" | no target), with
+    Hautus (1995) +0.5/+1 correction so perfect or empty cells stay finite.
+    Returns nan when the run has no low-load trials or no response column.
+    An always-"yes" (or always-"no") responder gives exactly 0.
+    """
+    c = COLS
+    if c["load"] not in g or "load_response" not in g:
+        return np.nan
+    low = g[g[c["load"]].astype(str).str.lower() == "low"]
+    if len(low) == 0:
+        return np.nan
+    nt = pd.to_numeric(low[c["n_targets"]], errors="coerce")
+    resp = pd.to_numeric(low["load_response"], errors="coerce")
+    ok = nt.notna() & resp.notna()
+    if not ok.any():
+        return np.nan
+    nt, resp = nt[ok], resp[ok]
+    present, said_yes = nt >= 1, resp == 1
+    n_sig, n_noise = int(present.sum()), int((~present).sum())
+    if n_sig == 0 or n_noise == 0:
+        return np.nan
+    h = (int((said_yes & present).sum()) + 0.5) / (n_sig + 1.0)
+    f = (int((said_yes & ~present).sum()) + 0.5) / (n_noise + 1.0)
+    return float(stats.norm.ppf(h) - stats.norm.ppf(f))
+
+
+def _rsvp_design(g):
+    """(P(stream contains >=1 target), max targets) for a run, taken from the
+    LOGGED DESIGN rather than estimated from the realised streams.
+
+    This matters: max_k P_hat(k) is upward-biased as an estimator of max_k P(k)
+    -- in an 80-trial block the observed modal count exceeds its expectation by
+    sampling noise alone -- so estimating chance from the sample would inflate
+    chance, deflate a*, and make the engagement/QC floors drift with block size.
+    The design is known exactly, so use it.
+
+    `rsvp_target_present_p` is logged from config.js v1.1.0 onward. Older runs
+    (uniform over 0..max_targets) have no such column; for those the implied
+    prevalence is max_targets / (max_targets + 1), which reproduces the original
+    2/3 and 1/3 chance levels exactly.
+    """
+    max_t = np.nan
+    if "rsvp_max_targets" in g:
+        v = pd.to_numeric(g["rsvp_max_targets"], errors="coerce").dropna()
+        if len(v):
+            max_t = int(v.iloc[0])
+    if not np.isfinite(max_t) or max_t < 1:
+        nt = pd.to_numeric(g.get(COLS["n_targets"]), errors="coerce")
+        max_t = int(np.nanmax(nt)) if nt is not None and nt.notna().any() else 2
+        max_t = max(max_t, 1)
+    p_pres = np.nan
+    if "rsvp_target_present_p" in g:
+        v = pd.to_numeric(g["rsvp_target_present_p"], errors="coerce").dropna()
+        if len(v):
+            p_pres = float(v.iloc[0])
+    if not np.isfinite(p_pres):
+        p_pres = max_t / (max_t + 1.0)   # legacy: uniform over 0..max_t
+    return float(np.clip(p_pres, 0.0, 1.0)), int(max_t)
+
+
+def _load_chance(g):
+    """Each load condition's own chance level on the secondary task, pooled over
+    the rows of one run.
+
+    Chance is defined as the BEST ACCURACY ACHIEVABLE BY A CONSTANT RESPONSE --
+    i.e. what a participant scores by answering the same thing every trial
+    without attending to the stream at all:
+      low  ("did an X appear?") -> max(P(present), P(absent))
+      high ("how many Xs?")     -> max_k P(n_targets = k), the modal count
+    Both are read from the run's OWN empirical target distribution rather than
+    assumed, because the two depend on target prevalence in opposite directions
+    (see config.js RSVP_TARGET_PRESENT_P). Under the legacy uniform-over-0..2
+    streams this reduces to the previously hardcoded 2/3 and 1/3; under 50%
+    prevalence both become 0.5. Hardcoding 1/(max+1) for the high condition
+    would let an 'always answer 0' responder score a* = +0.25 on 50%-prevalence
+    data and pass the engagement floor while doing nothing.
+    """
+    c = COLS
+    lc = g[c["load"]].astype(str).str.lower() if c["load"] in g else None
+    out = {}
+    for cond in ("low", "high"):
+        sub = g if lc is None else g[lc == cond]
+        if len(sub) == 0:
+            continue
+        p_pres, max_t = _rsvp_design(sub)
+        if cond == "low":
+            out[cond] = max(p_pres, 1.0 - p_pres)
+        else:
+            # count distribution is P(0) = 1 - p_pres and p_pres/max_t on each
+            # of 1..max_t, so the best constant answer is the larger of those
+            out[cond] = max(1.0 - p_pres, p_pres / max_t if max_t else 1.0)
+    return out
+
+
 def qc_exclusions(df):
     """Return (kept_df, report_df). Excludes whole participants failing QC."""
     c = COLS
@@ -196,11 +314,37 @@ def qc_exclusions(df):
             reasons.append(f"highcoh_acc={hi_acc:.2f}")
         if not np.isnan(load_acc) and load_acc < QC["min_load_acc"]:
             reasons.append(f"load_acc={load_acc:.2f}")
+        # Chance-relative secondary-task floor, evaluated per load condition
+        # present in the run. This is the criterion that actually has teeth on a
+        # low-load-only run (see the QC note above).
+        load_astar = np.nan
+        try:
+            lc_col = g[c["load"]].astype(str).str.lower() if c["load"] in g else None
+            chances = _load_chance(g)
+            astars = []
+            for cond, ch in chances.items():
+                sub = g if lc_col is None else g[lc_col == cond]
+                if len(sub) == 0 or not (ch < 1.0):
+                    continue
+                acc_c = float(sub[c["load_correct"]].mean())
+                astars.append((acc_c - ch) / (1.0 - ch))
+            if astars:
+                load_astar = float(np.min(astars))
+                if load_astar < QC["min_load_above_chance"]:
+                    reasons.append(f"load_above_chance={load_astar:.2f}")
+        except Exception as e:   # never silently skip a QC criterion
+            raise RuntimeError(
+                f"secondary-task above-chance QC failed for {sid}: {e}") from e
+        # Bias-immune low-load sensitivity floor (see QC note).
+        load_dp = _low_load_dprime(g)
+        if not np.isnan(load_dp) and load_dp < QC["min_load_dprime"]:
+            reasons.append(f"load_dprime={load_dp:.2f}")
         passed = len(reasons) == 0
         if passed:
             keep_ids.append(sid)
         rows.append(dict(subject=sid, n_trials=n, fast_rt_frac=fast_frac,
                          highcoh_acc=hi_acc, load_acc=load_acc,
+                         load_above_chance=load_astar, load_dprime=load_dp,
                          excluded=(not passed), reasons=";".join(reasons)))
     report = pd.DataFrame(rows)
     kept = df[df[c["subject"]].isin(keep_ids)].copy()
@@ -531,7 +675,8 @@ def fig_motion_type_thresholds(fits, out_path):
     present = [m for m in MOTION_TYPES if m in run_thr.motion_type.unique()]
     if len(present) < 1:
         return
-    colors = {"translation": "#1b9e77", "rotation": "#7570b3", "spiral": "#d95f02"}
+    colors = {"translation": "#1b9e77", "rotation": "#7570b3", "spiral": "#d95f02",
+              "radial": "#1f5fa9"}
     xpos = {m: i for i, m in enumerate(present)}
     piv = run_thr.pivot_table(index="subject", columns="motion_type",
                               values="threshold_run")

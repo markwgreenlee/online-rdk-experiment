@@ -25,11 +25,13 @@ around a central red fixation cross. A fraction of the dots (**coherence**)
 move coherently in the run's motion pattern; the rest move randomly. The
 participant judges the global direction (2-alternative forced choice).
 
-The experiment supports **three motion types**, each run as a **separate study**
+The experiment supports **four motion types**, each run as a **separate study**
 (see §1a): the coherent dots either **translate** (left / right), **rotate**
-rigidly about fixation (clockwise / counter-clockwise), or move in a **spiral**
+rigidly about fixation (clockwise / counter-clockwise), move in a **spiral**
 (a balanced 45° "screw" — equal radial and rotational components, judged by
-rotational sense). All three are matched on **area-weighted RMS retinal speed**,
+rotational sense), or move **radially** (pure expansion / contraction at a
+uniform radial speed, judged by radial sign). All four are matched on
+**area-weighted RMS retinal speed**,
 so the low-level motion energy is equated and the direction-discrimination
 threshold from each is a valid baseline for the corresponding pattern in the
 desktop **vection** experiment (translation ↔ linear vection; rotation and
@@ -43,18 +45,20 @@ must do with that stream:
 | Load | Secondary (letter) task | Demand |
 |------|-------------------------|--------|
 | **Low**  | "Did the letter **X** appear?" (yes/no) | minimal — detection |
-| **High** | "How many **X**s appeared?" (0–2) | high — working-memory count |
+| **High** | "How many **X**s appeared?" (0–`RSVP_MAX_TARGETS`, default 0–2) | high — working-memory count |
 
 Crucially, **the letter stream is generated identically in both conditions**
 (same seeded generator), so the *visual input* is matched and only the *task
-demand* differs.
+demand* differs. A target is present in **50%** of streams
+(`RSVP_TARGET_PRESENT_P`), which is what makes the low-load question
+un-gameable — see §6e.
 
 **Hypothesis.** Coherent-motion sensitivity is worse under high load: the
 75%-correct coherence **threshold** is higher (rightward-shifted psychometric
 function) in the high-load blocks — panel *b* of the figure above.
 
 ### Design
-- **Motion type:** one of `translation` / `rotation` / `spiral` per run,
+- **Motion type:** one of `translation` / `rotation` / `spiral` / `radial` per run,
   selected by a URL parameter (see §1a). Fixed for the whole session.
 - **Coherence:** 5 levels — 4 / 8 / 16 / 32 / 64 %.
 - **Direction:** balanced — left/right (translation) or CW/CCW (rotation,
@@ -62,14 +66,23 @@ function) in the high-load blocks — panel *b* of the figure above.
 - **Spiral radial sign:** expand/contract, balanced **within every
   coherence × sense cell** and logged as a nuisance variable
   (`radial_direction`). The participant judges *only* rotational sense.
-- **Load:** low vs high, run as two blocks, order counterbalanced across
-  participants.
-- **RSVP stream:** 6 letters at 150 ms/item (900 ms), 0–2 targets drawn
-  uniformly, never in the first or last slot. The stream **must fit inside
+- **Load:** **optional.** By default a run presents the **low-load block only**
+  (`?load=low`) — the RSVP stream is still shown and still questioned, so
+  fixation and the secondary-task demand are held constant; what is dropped is
+  the load *manipulation*, not the secondary task. `?load=both` restores the
+  original two-block design (low vs high, order counterbalanced across
+  participants). See §1c.
+- **Trials:** **160 test trials** per run either way, so the session length is
+  the same in both designs:
+  - single-load (default): 1 load × 5 coherence × 2 direction × **16** reps —
+    **32 trials per coherence level**
+  - two-block (`?load=both`): 2 load × 5 coherence × 2 direction × 8 reps —
+    16 trials per coherence × load cell
+  (spiral's expand/contract split lives inside the reps), + 10 practice trials.
+- **RSVP stream:** 6 letters at 150 ms/item (900 ms), a target present in **50%** of
+  streams (`RSVP_TARGET_PRESENT_P`) with the count then uniform over 1–2, never
+  in the first or last slot. The stream **must fit inside
   `MOTION_DURATION_MS`** — see §1b.
-- **Trials:** 2 load × 5 coherence × 2 direction × 8 reps = **160 test trials**
-  per run (spiral's expand/contract split lives inside the 8 reps), + 10
-  practice trials.
 - **Duration:** ~14 min of trials + calibration/instructions/breaks ≈ **20 min**
   per run.
 
@@ -77,9 +90,9 @@ All parameters live in **`config.js`** (single source of truth).
 
 ---
 
-## 1a. Three motion types, three separate runs (within-subject)
+## 1a. Four motion types, four separate runs (within-subject)
 
-The three motion types are **never mixed within a session** — mixing translation,
+The four motion types are **never mixed within a session** — mixing translation,
 rotation, and spiral trial-to-trial would confuse participants and blur the
 response mapping. Instead each motion type is deployed as its own **run**,
 selected at load time by a `motion` URL parameter:
@@ -88,20 +101,27 @@ selected at load time by a `motion` URL parameter:
 https://<username>.github.io/<repo>/?motion=translation
 https://<username>.github.io/<repo>/?motion=rotation
 https://<username>.github.io/<repo>/?motion=spiral
+https://<username>.github.io/<repo>/?motion=radial
 ```
+
+`?motion=` and `?load=` compose, e.g.
+`?motion=radial&load=low` (the default low-load radial baseline) or
+`?motion=rotation&load=both` (the two-block load design for rotation).
 
 If `motion` is absent, the run falls back to `CONFIG.MOTION_TYPE` (default
 `translation`). The resolved motion type is folded into the per-participant RNG
 seed, so the three runs get **independent but reproducible** trial lists and
 letter streams.
 
-**Within-subject.** Each participant completes **all three** motion types as
-three separate runs (separate Prolific studies, or three sessions). Because the
+**Within-subject.** Each participant completes **all four** motion types as
+four separate runs (separate Prolific studies, or four sessions). Because the
 seed combines `subject_id` with the motion type, the same person gets a
-different randomization in each run.
+different randomization in each run. Four runs is ~80 min of participant time;
+split them across days if that is too long for one sitting.
 
 **Counterbalance run order across participants.** Rotating the order of the
-three runs (e.g. a Latin square: T-R-S, R-S-T, S-T-R, …) removes practice/fatigue
+four runs (e.g. a 4×4 Latin square: T-R-S-D, R-S-D-T, S-D-T-R, D-T-R-S, where D
+= radial) removes practice/fatigue
 confounds from the between-type comparison. On Prolific this is done by
 assigning participants to the three study links in a counterbalanced order; each
 link carries a different `motion` parameter. Link a participant's three runs by
@@ -114,16 +134,21 @@ their Prolific PID (recorded as `subject_id` in every row).
 | Translation | left         | right         |
 | Rotation    | counter-clockwise (CCW) | clockwise (CW) |
 | Spiral      | counter-clockwise (CCW) | clockwise (CW) |
+| Radial      | contracting (inward)    | expanding (outward) |
 
 The rotational mapping is the natural one — the arrow points the way the *top* of
-the pattern moves.
+the pattern moves. Neither arrow is spatially congruent with a radial sign, so
+radial deliberately reuses the **same two keys** rather than switching to
+up/down: identical motor demands across all four runs remove response mapping as
+a confound for the cross-type threshold contrast, and the on-screen glyphs
+(`→←` vs `← →`) carry the mapping.
 
 ### Matching low-level motion energy across types
 
 The online aperture is a **flat** annulus (no funnel/looming), so it can't
 reproduce the desktop cone geometry — but it can reproduce each pattern's
 **low-level velocity field**, which is what makes the direction threshold a valid
-vection baseline. All three types are scaled to the **same area-weighted RMS
+vection baseline. All four types are scaled to the **same area-weighted RMS
 retinal speed** across the annulus (the mean squared speed weighted by dot area,
 = the reference translation speed `DOT_SPEED_DPS`):
 
@@ -133,8 +158,18 @@ retinal speed** across the annulus (the mean squared speed weighted by dot area,
 - **Spiral:** a logarithmic spiral with radial rate = tangential rate at every
   eccentricity (local velocity everywhere 45° to the radius); the rate k =
   v / √(2⟨r²⟩) makes the combined RMS equal v.
+- **Radial:** pure expansion/contraction at a **uniform** radial speed v — every
+  signal dot steps along its own radius by exactly v, with no angular component
+  and no speed gradient, so ⟨speed²⟩ = v² *exactly* and *identically for both
+  signs*. The uniform field (rather than the spiral's scale-invariant k·r) is
+  deliberate: it is the only radial field that equates expansion and contraction
+  **to each other**, so a measured expansion-vs-contraction threshold difference
+  cannot be a motion-energy artifact. It also reproduces the stimulus geometry of
+  Luo et al. (2026) Experiment 1, making that cross-study comparison direct. The
+  cost is that `radial` is then *not* the radial component of `spiral`, so spiral
+  does not decompose exactly into rotation ⊕ radial.
 
-The headless harness (`tests/verify_motion.js`) checks all three numerically —
+The headless harness (`tests/verify_motion.js`) checks all four numerically —
 see §8a.
 
 **Numerical verification (`analysis/verify_motion_energy_online.py`).** This is
@@ -144,15 +179,28 @@ Monte-Carlo-measures the equated quantity — the kinematic motion-energy proxy
 area-weighted ⟨speed²⟩ — by reproducing the plugin's **discrete** per-frame
 update (finite step + annulus respawn), so it catches implementation drift, not
 just the intended analytic field. On the shipped 2°–7° aperture at v = 6 °/s the
-signal motion energy matches to **< 2%** across the three types (translation
-0.00%, rotation −0.02%, spiral −1.84%; well inside the desktop 8% tolerance).
-The small spiral shortfall is expected — respawn removes the outermost, fastest
-dots that grow past the aperture. Results are in `motion_energy_check.csv` and
+signal motion energy matches to **< 2%** across the four types (translation
+0.00%, rotation −0.02%, spiral −1.84%, radial −0.00% for *both* expansion and
+contraction; well inside the desktop 8% tolerance). The small spiral shortfall is
+expected — respawn removes the outermost, fastest dots that grow past the
+aperture.
+
+**Known radial asymmetry (measured, not hidden).** Because the outer
+circumference is 3.5× the inner one, expanding signal dots cross the aperture
+boundary ~3.4× more often than contracting ones and are respawned at a random
+annulus location. The *energy* is unaffected (both signs measure v² exactly), but
+the respawn-flicker rate is not perfectly matched: the excess is **0.4%** of all
+per-frame teleports at the 16% coherence where the threshold sits, rising to
+3.7% at 64% coherence where accuracy is already at ceiling. The scale-invariant
+k·r field would make this 12× rather than 3.4×, which is a second reason the
+uniform field was chosen. This asymmetry is logged by
+`verify_motion_energy_online.py` (the `kept` column) and should be reported
+alongside any radial-sign result. Results are in `motion_energy_check.csv` and
 `motion_energy_equating.png`.
 
 **Coherence axis.** The concern that the *effect of coherence* on motion energy
 should be equal across types is satisfied by construction: noise dots teleport to
-a random annulus location by the **same** rule for all three types, so
+a random annulus location by the **same** rule for all types, so
 ME(c) = c · (signal energy, matched across types) + (1−c) · (noise pedestal,
 identical across types). Both terms are type-independent, so the ME-vs-coherence
 function overlaps at every level, not just on average.
@@ -219,6 +267,44 @@ Two consequences to keep in mind when reading the next runs:
   low-load "always-yes" base rate depends on the target-count distribution, so
   the chance levels the pre-check compares against differ between the two stream
   designs. Motion thresholds remain comparable; RSVP accuracies do not.
+
+---
+
+## 1c. The load manipulation is optional (and low-load is the default)
+
+The two scientific questions this paradigm can answer have different optimal
+designs, and running one design for both costs precision on whichever you care
+about more:
+
+| Question | Run with | Why |
+|---|---|---|
+| Does motion **type** shift the direction threshold? (primary) | `?load=low` — **default** | All 160 trials land on one psychometric function: 32 trials per coherence level instead of 16. |
+| Does attentional **load** shift it? (secondary) | `?load=both` | The high-vs-low contrast only means anything *within* a session. |
+
+**Why low-load-only is the better default right now.** The threshold estimate is
+the quantity every cross-type comparison rests on, and at 16 trials per
+coherence × load cell it is noisy: typically only one coherence level sits on
+the steep part of the function, so a single 16-trial cell carries most of the
+contrast. Simulating the registered Weibull on the shipped coherence ladder
+(α = 0.15, β = 2, 600 datasets) gives a threshold SD of **0.031** at 16
+trials/coherence versus **0.022** at 32 — a ratio of 0.695, i.e. the full √2
+binomial improvement with no penalty from the fit. The 95% interval on a single
+run's threshold narrows from **0.124** to **0.086** wide. Same session length,
+same participant burden.
+
+**The trap: do not subtract a later high-load run from an earlier low-load run.**
+`?load=low` now and `?load=high` later do **not** make a load contrast. That
+comparison would be between sessions, between days and possibly between
+displays — exactly the confound `display_provenance.csv` exists to catch — and
+it also throws away the within-run block-order counterbalancing. When you want
+the load effect, run `?load=both` and get it within a session. `?load=high`
+on its own exists only for completeness; it is almost never the thing you want.
+
+**What stays identical across designs.** The RSVP stream is generated by the
+same seeded generator regardless of `?load=`, and the seed is unchanged, so a
+given participant's trial list and letter streams are reproducible and
+comparable across designs. Single-load runs log `load_design = "single:low"` and
+`reps_per_cell_used = 16`; two-block runs log `load_design = "both"`.
 
 ---
 
@@ -410,6 +496,111 @@ completion rate. Trim any item your analysis will not use.
 
 ---
 
+## 6e. RSVP target prevalence and why chance is derived, not assumed
+
+The low-load question is "did an X appear?", so the best a participant can score
+**without attending to the stream at all** is to answer the more frequent
+alternative on every trial: `max(P(present), P(absent))`. That quantity is
+minimised at exactly **0.5**, which is why `RSVP_TARGET_PRESENT_P = 0.5`. The
+original design drew the target count uniformly over 0–2, putting a target in
+**2/3** of streams, so "always yes" scored **0.67** for free.
+
+Verified against 40,000 streams from the shipped generator (`helpers.js`):
+realised P(0,1,2) = (0.499, 0.251, 0.250), prevalence 0.5007.
+
+| Design | Strategy | Raw accuracy | Chance | a\* |
+|---|---|---|---|---|
+| uniform 0–2 (legacy) | low: always "yes" | 0.660 | 0.667 | −0.02 |
+| uniform 0–2 (legacy) | high: always "0" | 0.340 | 0.333 | +0.01 |
+| **50% prevalence** | low: always "yes" | 0.501 | 0.500 | **+0.00** |
+| **50% prevalence** | low: always "no" | 0.499 | 0.500 | **−0.00** |
+| **50% prevalence** | high: always "0" | 0.499 | 0.500 | **−0.00** |
+
+**The catch, and it is not optional.** Prevalence and the counting task pull in
+*opposite* directions. The best constant answer on the high-load question is the
+**modal count**, so dropping prevalence to 0.5 raises that baseline from 1/3 to
+0.5. Had the analysis kept its hardcoded `1/(max_targets + 1)`, an "always
+answer 0" responder on 50%-prevalence data would have scored
+**a\* = +0.25** and sailed through the 0.10 engagement floor while doing
+nothing. Both `analyze.py` and `weibull_analysis.py` therefore now compute
+
+```
+chance(low)  = max(P(present), 1 - P(present))
+chance(high) = max(1 - P(present), P(present) / max_targets)
+```
+
+**from the logged design** (`rsvp_target_present_p`, `rsvp_max_targets`), not
+from the realised streams. That distinction matters: `max_k P̂(k)` is
+*upward-biased* for `max_k P(k)` — in an 80-trial block the observed modal count
+exceeds its expectation by sampling noise alone — so a sample-based chance level
+would inflate chance, deflate a\*, and drift with block size. Estimating it from
+the sample moved the first pilot run's QC statistic from 0.119 to 0.041 and
+flipped it from pass to fail; the design-based rule reproduces 0.119 exactly.
+
+**Relationship to the §1b timing recalibration.** Prevalence is the *third*
+change to the stream design, and §1b's warning compounds: pre-recalibration
+(10 × 100 ms, uniform 0–2), post-recalibration (6 × 150 ms, uniform 0–2) and
+current (6 × 150 ms, 50% prevalence) runs are **not poolable on the secondary
+task**, because each has different chance levels. Motion thresholds remain
+comparable across all three. Two interactions worth noting:
+
+- §1b flagged that target *density* rose when the stream shortened to 6 items
+  (0–2 targets in 6 slots is denser than in 10). Dropping prevalence to 0.5
+  lowers the mean target count from 1.0 to 0.75, which partly offsets that.
+- §1b named `RSVP_MAX_TARGETS` as the next parameter to touch if the high-load
+  floor persists. Prevalence was changed instead, and it cuts the *other* way for
+  the counting task: half of all trials now have the answer 0, so proportionally
+  fewer trials carry the hard 1-vs-2 discrimination. Whether the floor lifts is
+  an empirical question for the next runs — watch `load_dprime` and the
+  high-load confusion pattern, not just the gate verdict.
+
+The timing constraint from §1b still holds: 6 × 150 = 900 ms ≤ 1000 ms.
+
+**Backward compatibility.** Runs collected before `config.js` v1.1.0 have no
+`rsvp_target_present_p` column. For those the implied prevalence is
+`max_targets / (max_targets + 1)`, which reproduces the original 2/3 (low) and
+1/3 (high) chance levels exactly, so previously-collected data are scored as
+they always were. Note that v1.1.0 changes `VERSION`, and `VERSION` is part of
+the RNG seed, so trial lists and streams differ from v1.0.0 runs by design.
+
+**Side benefits.** Both load conditions now sit at a 0.5 chance level, so
+`a* = (acc − chance)/(1 − chance)` is on the same scale in both and the
+engagement gate's `a*_low − a*_high` is a straight difference of two comparable
+numbers. And 50% prevalence **balances the signal and noise cells** (80 present /
+80 absent in a 160-trial run), which is what makes the d′ criterion below
+exactly bias-immune.
+
+### The accuracy criterion alone is not enough — hence d′
+
+`min_load_above_chance` is bias-*sensitive*: an all-yes voter scores a\* = 0 only
+*in expectation*, and sampling noise in the streams lets them clear a 0.10 floor
+**12% of the time** in a 160-trial run (16% at the legacy 2/3 prevalence).
+The low-load task is a yes/no detection task, so the bias-free measure is
+**d′**, computed from the logged `load_response` with the Hautus (1995)
+log-linear correction:
+
+```
+hit = P(said "yes" | >=1 target),  fa = P(said "yes" | no target)
+d' = Phi^-1(hit) - Phi^-1(fa)          [+0.5 to counts, +1 to totals]
+```
+
+A responder whose hit rate equals their false-alarm rate has d′ = 0 **by
+construction**, whatever the prevalence and whatever the noise. Registered floor
+`min_load_dprime = 0.50`, reported as `load_dprime` in `qc_report.csv`.
+
+| | low-load d′ | verdict |
+|---|---|---|
+| first pilot run (hit 0.74, FA 0.32) | **1.11** | passes, 2.2× the floor |
+| simulated attentive responder (hit 0.85, FA 0.15) | **2.04** | passes |
+| always "yes", 50% prevalence | **0.00** | excluded |
+| always "yes", legacy 2/3 prevalence | 0.25 | excluded |
+| responder saying "yes" on 95% of trials | ≈0 (sd 0.34) | excluded 94% of the time |
+
+d′ applies only to the low-load yes/no task; the high-load counting task keeps
+the a\* criterion.
+
+---
+
 ## 7. Data schema (columns in the exported CSV)
 
 One row per jsPsych trial. Rows where `trial_kind == "rdk"` are the RDK trials;
@@ -429,6 +620,8 @@ One row per jsPsych trial. Rows where `trial_kind == "rdk"` are the RDK trials;
 | `task` | `practice` / `test` |
 | `trial_kind` | `rdk`, `fixation`, `iti`, `consent`, `calibration`, … |
 | `load_condition` | `low` / `high` |
+| `load_design` | `single:low` / `single:high` / `both` — which load design this run used (§1b) |
+| `reps_per_cell_used` | reps per coherence × direction cell actually run (16 single-load, 8 two-block) |
 | `motion_type` | `translation` / `rotation` / `spiral` (fixed per run) |
 | `coherence` | motion coherence 0–1 |
 | `direction` | true motion direction — `left`/`right` (translation) or `cw`/`ccw` (rotation, spiral) |
@@ -438,6 +631,8 @@ One row per jsPsych trial. Rows where `trial_kind == "rdk"` are the RDK trials;
 | `motion_rt` | reaction time (ms) for the direction judgement |
 | `rsvp_stream` | the exact letter stream shown |
 | `rsvp_n_targets` | number of target letters (X) actually present |
+| `rsvp_max_targets` | count range upper bound for the high-load question |
+| `rsvp_target_present_p` | P(stream contains ≥1 target); chance levels are derived from this (§6e) |
 | `load_response` | answer to the letter question |
 | `load_correct` | boolean — letter task correct |
 | `load_rt` | reaction time (ms) for the letter answer |
@@ -509,7 +704,7 @@ motion-type threshold ordering and excludes non-engaged runs from the load test.
 ### Single-file, motion-type-aware pipeline
 
 `analysis/weibull_analysis.py` analyses **one participant's CSV** end-to-end and
-is aware of the three motion types:
+is aware of the four motion types:
 
 ```bash
 cd analysis
@@ -572,6 +767,15 @@ python weibull_analysis.py path/to/data.csv --out out_dir [--nboot 2000] \
   flat-load spiral run from the engaged rotation run in the single-participant
   pilot.)
 - **Manipulation checks** (only meaningful with the new coding):
+  `*_radial_sign_thresholds.csv` / `*_radial_sign_diff.csv` — **radial runs
+  only**: separate psychometric fits for expanding vs contracting trials plus a
+  bootstrapped threshold difference. This is the direct coherence-axis test of the
+  expansion/contraction anisotropy that Luo, Ashida, Yokoi & Takemura (2026,
+  *J Vis* 26(10):18) report for *speed* discrimination (contraction more
+  sensitive at 4 and 16 °/s — the band containing this experiment's 6 °/s dot
+  speed). The two measures are **not** numerically comparable (they vary speed at
+  full coherence; we vary coherence at fixed speed), so this tests only whether an
+  anisotropy of the same *sign* appears on the coherence axis;
   `*_direction_bias.csv` — accuracy and choice-rate split by response sign
   (catches a participant biased toward one sense); `*_spiral_radial_check.csv` —
   accuracy split by the **unjudged** expand/contract sign, which should not
@@ -611,7 +815,7 @@ It checks, at full coherence (all dots signal, deterministic motion):
   Right → CW for rotation & spiral, Left → left / Right → right for translation,
   and correct scoring.
 - **Trial balance** — the spiral radial nuisance is 50/50 within every
-  coherence × sense cell, and all three types produce equal trials per block.
+  coherence × sense cell, and all four types produce equal trials per block.
 
 Run this after any change to `plugin-rdk-load.js`, `config.js`, or
 `experiment.js`.
@@ -626,19 +830,27 @@ top of `analysis/analyze.py` (and mirrored in `weibull_analysis.py`); the values
 below are the registered defaults. Anything not listed here is exploratory and
 will be labelled as such in the write-up.
 
-**Design.** Within-subject: every participant completes all three motion-type
-runs (`translation`, `rotation`, `spiral`), each a separate session selected by
+**Design.** Within-subject: every participant completes all four motion-type
+runs (`translation`, `rotation`, `spiral`, `radial`), each a separate session selected by
 the `motion` URL parameter and linked by Prolific PID (`subject_id`). Run order
-is counterbalanced across participants. Each run has two attentional-load blocks
-(easy vs. hard RSVP at fixation) and five coherence levels
+is counterbalanced across participants. Five coherence levels
 (`4, 8, 16, 32, 64%`), 160 test trials per run.
+
+**Load design is a registered per-run choice (§1c).** The primary motion-type
+contrast is collected with `?load=low` — one low-load block, 32 trials per
+coherence level — because threshold precision is what that contrast depends on.
+The secondary load hypothesis is tested only on runs collected with
+`?load=both`, where the high-vs-low contrast is within-session. A low-load run
+and a high-load run from different sessions are **not** pooled into a load
+contrast; this is a registered exclusion, not a judgement call.
 
 **Primary hypothesis (motion-type effect).** Direction-discrimination
 threshold — the coherence yielding 75% correct — differs across motion type.
 Threshold is the `thresh` parameter of a 2-AFC Weibull (`GUESS = 0.5`,
 `LAPSE = 0.02`, `THRESHOLD_P = 0.75`) fit to `motion_correct` collapsed across
-load. Confirmatory test: **Friedman** across the three types, followed by
-**Wilcoxon signed-rank** for each pair. The fit is direction-agnostic, so CW/CCW
+load. Confirmatory test: **Friedman** across the four types, followed by
+**Wilcoxon signed-rank** for each of the **6** pairs (FDR-corrected over 6, not
+3). The fit is direction-agnostic, so CW/CCW
 coding requires no special handling.
 
 **Low-level motion energy is equated across types (ruled-out alternative).** A
@@ -648,7 +860,7 @@ kinematic ME proxy (area-weighted ⟨speed²⟩, which for the constant-size onl
 dots equals ⟨area × speed²⟩) equal to the reference v². This is **verified**
 numerically on the shipped 2°–7° aperture — reproducing the plugin's discrete
 per-frame kinematics — at **< 2%** across types (translation 0.00%, rotation
-−0.02%, spiral −1.84%; inside the desktop 8% tolerance;
+−0.02%, spiral −1.84%, radial −0.00% both signs; inside the desktop 8% tolerance;
 `analysis/verify_motion_energy_online.py`, `motion_energy_check.csv`). Because
 noise dots teleport by the same rule for all types, ME(c) = c·(matched signal) +
 (1−c)·(identical noise pedestal) is type-independent at **every** coherence, not
@@ -663,8 +875,8 @@ change to the aperture geometry or velocity-field formulas in
 ("Matching low-level motion energy across types") for the full argument and
 figure.
 
-**Secondary hypothesis (load effect, per type).** Within each motion type,
-threshold is higher under high than low load. Confirmatory test: **paired
+**Secondary hypothesis (load effect, per type).** Tested only on `?load=both`
+runs. Within each motion type, threshold is higher under high than low load. Confirmatory test: **paired
 _t_-test** (with Wilcoxon signed-rank reported alongside) on the per-participant
 high−low threshold difference, one test per motion type.
 
@@ -680,10 +892,34 @@ runs still contribute their collapsed-across-load threshold to the primary
 motion-type test; only the *load* contrast is dropped. This rule is applied
 automatically and logged (`load_engagement.csv`, `load_test_exclusions.csv`).
 
+**Secondary-task chance levels.** Defined as the best accuracy achievable by a
+constant response and computed from the logged design, not estimated from the
+realised streams (§6e): `chance(low) = max(P(present), 1 − P(present))` and
+`chance(high) = max(1 − P(present), P(present)/max_targets)`. With
+`RSVP_TARGET_PRESENT_P = 0.5` both equal 0.50.
+
 **Participant-level QC (exclude the whole participant's data).** Registered
 thresholds in `QC = {...}`: fewer than **140/160** valid test trials; more than
 **10%** of motion RTs under 200 ms; accuracy below **0.65** at the two highest
-coherences (32/64%); secondary-task accuracy below **0.55**. A participant
+coherences (32/64%); secondary-task accuracy below **0.55**; and
+**normalized above-chance secondary-task accuracy below 0.10**
+(`min_load_above_chance`, evaluated per load condition present in the run); and
+**low-load d′ below 0.50** (`min_load_dprime`, log-linear corrected — the
+bias-immune criterion, see §6e).
+
+The last criterion was added when the load manipulation became optional, and it
+closes a hole that a low-load-only design would otherwise leave wide open. With
+`RSVP_MAX_TARGETS = 2` and uniform 0–2 targets, P(at least one X) ≈ 2/3, so a
+participant who simply answers "yes" on every trial scores ≈ 0.67 on the
+low-load letter task — comfortably past the raw **0.55** floor — while giving no
+evidence of having attended the stream at all. In the two-block design the
+engagement gate catches that; in a low-load-only run the RSVP accuracy is the
+*only* secondary-task evidence there is, so the floor has to be expressed
+relative to chance. Verified on simulated runs: an always-yes responder is excluded
+(a\* = 0.10, d′ = 0.30) while an attentive responder passes
+(a\* = 0.59, d′ = 2.04). The registered value 0.10 matches
+`ENGAGE_MIN_DROP`; note the first pilot run would pass it only narrowly
+(a\* = 0.12 on its weaker half). A participant
 failing any criterion on any run is excluded from that run's analyses.
 
 **Inference framing.** With a single participant the appropriate inference is
