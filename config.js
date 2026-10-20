@@ -171,7 +171,24 @@ const CONFIG = {
   //   pitch (active area 473.8 x 296.1 mm). Assuming a 60 cm viewing distance
   //   gives ~37 px/deg. Adjust ASSUMED_VIEW_DIST_MM to your real distance.
   DISPLAY_PIXEL_PITCH_MM: 0.282,
-  ASSUMED_VIEW_DIST_MM: 600,
+  ASSUMED_VIEW_DIST_MM: 574, // = TARGET_VIEW_DIST_MM; keep the two in step
+
+  // ---- standard viewing distance ----
+  // 57.4 cm is the distance at which one degree of visual angle subtends almost
+  // exactly one centimetre on screen: 2 * 574 * tan(0.5 deg) = 10.018 mm, i.e.
+  // 1 deg = 1 cm to within 0.18%. Working at this distance makes degrees and
+  // centimetres interchangeable, which is why it is the lab standard here.
+  TARGET_VIEW_DIST_MM: 574,
+  // Accepted window around the target. The blindspot estimate is a perceptual
+  // judgement and is not precise to the millimetre, so demanding better than
+  // this would just produce dropout. +/-50 mm is +/-8.7% of the distance, hence
+  // +/-8.7% in degrees -- small next to the 23% uncorrected spread it replaces.
+  // Checked against the 12 pilot runs: this window flags exactly the four
+  // sessions whose card-resize step was demonstrably mis-set (see README 9b).
+  VIEW_DIST_TOLERANCE_MM: 50,
+  // Extra calibration attempts allowed before the run proceeds anyway (the
+  // result is still logged and flagged, never silently accepted as on-target).
+  VIEW_DIST_MAX_RETRIES: 2,
 
   /* ---------------- misc ---------------- */
   VERSION: "1.1.0", // 1.1.0: optional load design, radial motion type, 50% RSVP target prevalence

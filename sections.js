@@ -393,7 +393,43 @@ window.SECTIONS = (function () {
   // Standardizes stimulus size across monitors: the participant matches an
   // on-screen card to a real credit card (px/cm), then a blind-spot task fixes
   // viewing distance, giving px-per-degree. We convert and store it.
-  const calibration = {
+  // ---------------------------------------------------------------- calibration
+  // Target viewing distance. 57.4 cm is the distance at which one degree of
+  // visual angle subtends almost exactly one centimetre (2*574*tan(0.5 deg) =
+  // 10.018 mm, i.e. 1 deg = 1 cm to within 0.18%), so degrees and centimetres
+  // are interchangeable. Both calibration steps are framed around it and the
+  // blindspot result is checked against it before the run proceeds.
+  const TARGET_MM = CONFIG.TARGET_VIEW_DIST_MM;
+  const TOL_MM = CONFIG.VIEW_DIST_TOLERANCE_MM;
+  const TARGET_CM = (TARGET_MM / 10).toFixed(1);
+  const TARGET_IN = (TARGET_MM / 25.4).toFixed(0);
+
+  // Calibration state, read by the loop_function at the bottom of this block.
+  const calState = { attempts: 0, lastMm: null, withinTol: false, retry: false };
+
+  // Step 0: get the participant to the target distance BEFORE measuring, so the
+  // blindspot step is a check on a deliberate position rather than a discovery
+  // of wherever they happened to be sitting.
+  const seating = {
+    type: jsPsychHtmlButtonResponse,
+    stimulus:
+      "<h3>Please set your viewing distance</h3>" +
+      "<p>This study needs your eyes about <b>" + TARGET_CM + " cm</b> " +
+      "(about " + TARGET_IN + " inches) from the screen, and it is important " +
+      "that you stay at roughly that distance for the whole session.</p>" +
+      "<div style='text-align:left;max-width:34em;margin:0 auto;'><ul>" +
+      "<li>Two sheets of A4 paper laid end to end are 59 cm &mdash; close " +
+      "enough to judge by.</li>" +
+      "<li>For most adults this is a little less than a full arm's length " +
+      "from the screen.</li>" +
+      "<li>Sit comfortably upright. We will measure the distance next and " +
+      "ask you to adjust if it is off.</li>" +
+      "</ul></div>",
+    choices: ["I am seated about " + TARGET_CM + " cm away"],
+    data: { trial_kind: "seating" },
+  };
+
+  const chinrest = {
     type: jsPsychVirtualChinrest,
     blindspot_reps: 3,
     resize_units: "deg",
@@ -401,11 +437,35 @@ window.SECTIONS = (function () {
     // AFTER the plugin scales the wrapper. It is NOT the display's true
     // px/deg -- see on_finish, which recovers that for the RDK canvas.
     pixels_per_unit: 40,
+    item_width_mm: CONFIG.KNOWN_CARD_WIDTH_MM,
+    // NOTE on what this step does and does not buy us. The plugin's px/deg
+    // works out to depend only on the RATIO of two pixel measurements -- the
+    // width the card was dragged to, and how far the ball travelled before it
+    // vanished. Substituting its own formulas,
+    //   view_dist = ((square_px - ball_px)/px2mm) / tan(13.5 deg)
+    //   px2deg    = item_width_px / item_width_deg
+    // the physical 85.6 mm cancels out of px2deg entirely. The card's real-world
+    // size survives only in the REPORTED px2mm and view_dist_mm. So this step
+    // does not calibrate the angular scale by itself; it is what turns the
+    // blindspot result into millimetres, which is what the distance check below
+    // needs. Getting the card right still matters -- mis-dragging it shows up as
+    // an apparently wrong viewing distance, which is exactly what the check
+    // catches.
+    adjustment_prompt:
+      "<h3>Step 1 of 2: set the screen scale</h3>" +
+      "<p>Hold a <b>credit card, bank card or ID card</b> flat against the " +
+      "screen and drag the bottom-right corner of the grey box until the box " +
+      "is exactly the same size as the card.</p>" +
+      "<p>Take care with this: it tells us how large a centimetre is on your " +
+      "display, and the distance measurement on the next screen depends on it.</p>",
+    adjustment_button_prompt: "The box matches my card",
     // The plugin's default prompt says "black square", but this study runs on a
     // black page, so the fixation target is recoloured to WHITE (see the
     // #virtual-chinrest-square rule in index.html). Keep the wording consistent.
     blindspot_prompt:
-      "<p>Now we will quickly measure how far away you are sitting.</p>" +
+      "<h3>Step 2 of 2: measure your viewing distance</h3>" +
+      "<p>Stay at about <b>" + TARGET_CM + " cm</b> from the screen while you " +
+      "do this.</p>" +
       "<div style='text-align:left;'><ol>" +
       "<li>Put your left hand on the <b>space bar</b>.</li>" +
       "<li>Cover your right eye with your right hand.</li>" +
@@ -414,6 +474,12 @@ window.SECTIONS = (function () {
       "from right to left. Press the space bar as soon as the ball disappears.</li>" +
       "</ol></div>" +
       "<p>Press the space bar when you are ready to begin.</p>",
+    viewing_distance_report:
+      "<p>Based on your responses, you are sitting about " +
+      "<span id='distance-estimate' style='font-weight:bold;'></span> from the screen.</p>" +
+      "<p>We are aiming for <b>" + TARGET_CM + " cm</b>. If the estimate is " +
+      "close to that, continue. If it looks wrong, measure again.</p>",
+    redo_measurement_button_label: "Measure again",
     on_finish: function (data) {
       // CAREFUL -- `data.px2deg` is NOT the display's true pixels-per-degree.
       // With `resize_units: "deg"` the plugin measures the real value, then
@@ -437,21 +503,96 @@ window.SECTIONS = (function () {
       // already the true value, so the fallback below leaves it alone.)
       const reported = Number(data.px2deg);
       const sf = Number(data.scale_factor);
+      const scaled = isFinite(sf) && sf > 0;
       const ppd =
         isFinite(reported) && reported > 0
-          ? (isFinite(sf) && sf > 0 ? reported * sf : reported)
+          ? (scaled ? reported * sf : reported)
           : CONFIG.FALLBACK_PX_PER_DEGREE;
+
+      // Distance check against the target. The measured distance is what makes
+      // the rendered degrees true, so it is what we render from; the target is
+      // what we are trying to SIT at, and a run that misses it is flagged rather
+      // than silently rescaled to pretend otherwise.
+      const vd = Number(data.view_dist_mm);
+      const err = isFinite(vd) ? vd - TARGET_MM : NaN;
+      calState.attempts += 1;
+      calState.lastMm = isFinite(vd) ? vd : null;
+      calState.withinTol = isFinite(err) && Math.abs(err) <= TOL_MM;
+      calState.retry =
+        !calState.withinTol && calState.attempts <= CONFIG.VIEW_DIST_MAX_RETRIES;
+
+      // Independent cross-check: px/deg implied by the CARD alone on the
+      // assumption that the participant is at the target distance. This uses the
+      // card's physical reference, which cancels out of the plugin's own px2deg
+      // (see the note above), so it is a genuinely separate estimate. The two
+      // agree exactly when the measured distance equals the target, and their
+      // ratio is TARGET_MM / view_dist_mm, so logging both makes the distance
+      // error recoverable from the saved data alone.
+      const px2mmTrue = scaled ? Number(data.px2mm) * sf : Number(data.px2mm);
+      const mmPerDeg = 2 * TARGET_MM * Math.tan((0.5 * Math.PI) / 180);
+      const ppdAtTarget = isFinite(px2mmTrue) ? px2mmTrue * mmPerDeg : null;
+
       ExpBuild.setPxPerDegree(ppd);
       jsPsych.data.addProperties({
         px_per_degree: ppd,                        // TRUE px/deg used to render
         px_per_degree_reported: isFinite(reported) ? reported : null,
-        chinrest_scale_factor: isFinite(sf) ? sf : null,
-        view_dist_mm: data.view_dist_mm || null,   // blindspot viewing distance
+        px_per_degree_at_target: ppdAtTarget,      // card-only cross-check
+        chinrest_scale_factor: scaled ? sf : null,
+        px_per_mm: isFinite(px2mmTrue) ? px2mmTrue : null,
+        view_dist_mm: isFinite(vd) ? vd : null,    // blindspot viewing distance
+        view_dist_target_mm: TARGET_MM,
+        view_dist_error_mm: isFinite(err) ? err : null,
+        view_dist_within_tolerance: calState.withinTol,
+        calibration_attempts: calState.attempts,
         win_width_deg: data.win_width_deg || null, // window width in degrees
         item_width_mm: data.item_width_mm || null, // card resize result
       });
     },
     data: { trial_kind: "calibration" },
+  };
+
+  // Shown only when the measured distance missed the window and another attempt
+  // is allowed. Tells the participant which way to move, by how much.
+  const seatingRetry = {
+    timeline: [
+      {
+        type: jsPsychHtmlButtonResponse,
+        stimulus: function () {
+          const mm = calState.lastMm;
+          const cm = mm == null ? "?" : (mm / 10).toFixed(0);
+          const tooClose = mm != null && mm < TARGET_MM;
+          const byCm =
+            mm == null ? "" : (Math.abs(mm - TARGET_MM) / 10).toFixed(0);
+          return (
+            "<h3>Let's adjust your position</h3>" +
+            "<p>That measurement came out at about <b>" + cm + " cm</b>, and we " +
+            "are aiming for <b>" + TARGET_CM + " cm</b>.</p>" +
+            "<p>Please move " +
+            (tooClose
+              ? "<b>back about " + byCm + " cm</b>"
+              : "<b>forward about " + byCm + " cm</b>") +
+            ", then we will measure once more.</p>" +
+            "<p style='color:#888;font-size:0.9em;'>If the card box on the " +
+            "first screen did not quite match your card, that also shifts this " +
+            "estimate &mdash; you can correct it on the next attempt.</p>"
+          );
+        },
+        choices: ["Measure again"],
+        data: { trial_kind: "seating_retry" },
+      },
+    ],
+    conditional_function: function () {
+      return calState.retry;
+    },
+  };
+
+  // Seat -> measure -> (adjust and repeat). Pushed into the timeline as a single
+  // node by run.js, so its shape can change without touching the assembly.
+  const calibration = {
+    timeline: [seating, chinrest, seatingRetry],
+    loop_function: function () {
+      return calState.retry;
+    },
   };
 
   /* ---------------------- general instructions ------------------- */
@@ -664,6 +805,7 @@ window.SECTIONS = (function () {
     demographics,
     safetyGate,
     calibration,
+    chinrest,   // the raw virtual-chinrest node (addressed by tests)
     generalInstructions,
     comprehension: [comprehensionLoop],
     practiceIntro,

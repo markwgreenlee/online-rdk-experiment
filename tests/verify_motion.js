@@ -425,6 +425,7 @@ console.log("\n[calibration -> rendered aperture]");
   sandbox.document = { body: {}, getElementById: () => ({ style: {} }),
                        createElement: () => ({ style: {}, appendChild() {} }) };
   sandbox.window.location = { search: "", href: "" };
+  sandbox.NaN = NaN;
   let captured = null;
   sandbox.window.ExpBuild = { setPxPerDegree: (v) => { captured = v; } };
   sandbox.window.__JSPSYCH__ = {
@@ -440,13 +441,20 @@ console.log("\n[calibration -> rendered aperture]");
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), sandbox, { filename: f });
   vm.runInContext(fs.readFileSync(path.join(ROOT, "sections.js"), "utf8"), sandbox,
                   { filename: "sections.js" });
-  const cal = sandbox.window.SECTIONS && sandbox.window.SECTIONS.calibration;
-  check("sections.js exposes the calibration node", !!(cal && cal.on_finish));
+  const S = sandbox.window.SECTIONS;
+  const cal = S && S.chinrest;
+  check("sections.js exposes the virtual-chinrest node", !!(cal && cal.on_finish));
+  check("calibration is a seat -> measure -> verify loop around it",
+    !!(S.calibration && Array.isArray(S.calibration.timeline) &&
+       S.calibration.timeline.indexOf(cal) >= 0 &&
+       typeof S.calibration.loop_function === "function"),
+    "timeline len " + (S.calibration && S.calibration.timeline || []).length);
 
-  // a real observed case: run ANON-3D22LCQJK5 reported px2deg 40, scale_factor 0.8517
-  const SF = 0.8517, REPORTED = 40;
+  // a real observed case: run ANON-3D22LCQJK5 reported px2deg 40, scale_factor
+  // 0.8517, measured 563.4 mm -- on target (|563.4 - 574| = 10.6 <= 50)
+  const SF = 0.8517, REPORTED = 40, TARGET = 574;
   cal.on_finish({ px2deg: REPORTED, scale_factor: SF, view_dist_mm: 563.4,
-                  win_width_deg: 48, item_width_mm: 85.6 });
+                  px2mm: 4.06, win_width_deg: 48, item_width_mm: 85.6 });
   const expected = REPORTED * SF;                     // 34.068 px/deg, the TRUE value
   check("on_finish recovers px2deg_true = reported x scale_factor",
     Math.abs(captured - expected) < 1e-9,
@@ -457,6 +465,49 @@ console.log("\n[calibration -> rendered aperture]");
     sandbox.__props.px_per_degree === expected &&
     sandbox.__props.px_per_degree_reported === REPORTED &&
     sandbox.__props.chinrest_scale_factor === SF);
+
+  // ---- the 57.4 cm distance gate ----
+  const P = sandbox.__props;
+  check("target distance is logged and 1 deg = 1 cm there",
+    P.view_dist_target_mm === TARGET &&
+    Math.abs(2 * TARGET * Math.tan(Math.PI / 360) - 10) / 10 < 0.002,
+    "target=" + P.view_dist_target_mm);
+  check("on-target measurement passes the gate and does not loop",
+    P.view_dist_within_tolerance === true &&
+    Math.abs(P.view_dist_error_mm - (563.4 - TARGET)) < 1e-9 &&
+    S.calibration.loop_function() === false,
+    "err=" + P.view_dist_error_mm + " within=" + P.view_dist_within_tolerance);
+  // card-only cross-check: the two estimates must differ by exactly the
+  // distance error, i.e. ratio == TARGET / view_dist_mm
+  check("card-only px/deg cross-check scales as TARGET / measured distance",
+    Math.abs(P.px_per_degree_at_target / P.px_per_degree - TARGET / 563.4) < 2e-3,
+    "ratio " + (P.px_per_degree_at_target / P.px_per_degree).toFixed(4) +
+    " vs " + (TARGET / 563.4).toFixed(4));
+
+  // off-target: run ANON-Z1AQ28UQXR measured 429.67 mm, 144 mm too close
+  cal.on_finish({ px2deg: REPORTED, scale_factor: 0.9141, view_dist_mm: 429.67,
+                  px2mm: 5.32, item_width_mm: 85.6 });
+  check("off-target measurement fails the gate and loops",
+    sandbox.__props.view_dist_within_tolerance === false &&
+    S.calibration.loop_function() === true,
+    "within=" + sandbox.__props.view_dist_within_tolerance);
+  check("retry screen tells the participant which way to move, by how much",
+    (function () {
+      const rt = S.calibration.timeline[S.calibration.timeline.length - 1];
+      if (!rt || !rt.conditional_function || !rt.conditional_function()) return false;
+      const html = rt.timeline[0].stimulus();
+      return /back about 14 cm/.test(html) && /43 cm/.test(html);
+    })(), "retry copy");
+
+  // the retry budget is finite: the run proceeds (still flagged) once spent
+  cal.on_finish({ px2deg: REPORTED, scale_factor: 0.9141, view_dist_mm: 429.67,
+                  px2mm: 5.32, item_width_mm: 85.6 });
+  check("retry budget is finite -- run proceeds after it is spent, still flagged",
+    S.calibration.loop_function() === false &&
+    sandbox.__props.view_dist_within_tolerance === false &&
+    sandbox.__props.calibration_attempts === 3,
+    "attempts=" + sandbox.__props.calibration_attempts +
+    " loop=" + S.calibration.loop_function());
 
   // unscaled case (resize_units:"none"): px2deg is already true, leave it alone
   captured = null;

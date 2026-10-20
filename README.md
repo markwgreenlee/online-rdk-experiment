@@ -1148,6 +1148,99 @@ plugin then renders an aperture of exactly the calibrated angular size
 
 ---
 
+## 9b. Standard viewing distance: 57.4 cm
+
+**Why 57.4 cm.** At 574 mm one degree of visual angle subtends
+`2 x 574 x tan(0.5 deg) = 10.018 mm` -- one degree is one centimetre to within
+0.18%. Degrees and centimetres are interchangeable at that distance, which makes
+it the standard position for this study and for the companion vection
+experiment. `CONFIG.TARGET_VIEW_DIST_MM = 574`, with
+`ASSUMED_VIEW_DIST_MM` kept in step so the no-calibration fallback matches
+(35.53 px/deg on the reference display, previously 40.0 at an assumed 600 mm).
+
+**What the two calibration steps actually measure.** Worth stating because it is
+not what it looks like. Substituting the plugin's own formulas,
+
+```
+view_dist_mm = ((square_px - ball_px) / px2mm) / tan(13.5 deg)
+item_width_deg = 2 * atan((item_width_mm / 2) / view_dist_mm)
+px2deg = item_width_px / item_width_deg
+```
+
+`item_width_mm` **cancels out of `px2deg` entirely**. The plugin's angular scale
+depends only on the *ratio of two pixel measurements* -- the width the card was
+dragged to, and how far the ball travelled before vanishing. The credit card's
+physical 85.6 mm reference, which is the whole point of using a card, contributes
+nothing to the angular calibration; it survives only in the reported `px2mm` and
+`view_dist_mm`. So the card step does not calibrate degrees on its own -- it is
+what converts the blindspot result into millimetres, which is what a distance
+check needs.
+
+**The flow is now seat -> measure -> verify.** `SECTIONS.calibration` is a
+looping timeline node (`run.js` pushes it unchanged; the raw chinrest trial is
+exported separately as `SECTIONS.chinrest` for tests):
+
+1. **Seating screen.** Asks the participant to sit at 57.4 cm *before* anything
+   is measured, with concrete references (two A4 sheets end to end are 59 cm; a
+   little under a full arm's length). The blindspot step then checks a
+   deliberate position rather than discovering wherever they happened to be.
+2. **Card step**, reworded to stress that this sets the centimetre scale and
+   that the distance measurement depends on it.
+3. **Blindspot step**, reworded to hold the target distance, with the distance
+   report naming 57.4 cm as the goal.
+4. **Verification.** If `|measured - 574| > VIEW_DIST_TOLERANCE_MM` (50 mm) the
+   participant is told which way to move and by how many cm, and the measurement
+   repeats, up to `VIEW_DIST_MAX_RETRIES` (2) further attempts. After that the
+   run proceeds but the miss is **logged and flagged, never silently accepted**.
+
+**Rendering still uses the MEASURED distance, not the target.** The target is
+what we try to sit at; the measured value is what makes the rendered degrees
+true. Forcing the target onto a participant who is demonstrably at 51 cm would
+reintroduce exactly the error section 9a fixes. The gate narrows the distribution;
+it does not license pretending it is a delta function.
+
+**Tolerance.** +/-50 mm is +/-8.7% of the distance and therefore +/-8.7% in
+degrees -- against the 23% uncorrected spread it replaces. The blindspot estimate
+is a perceptual judgement, not precise to the millimetre, so a tighter window
+would mostly produce dropout.
+
+**Validated against the 12 pilot runs** (`analysis/view_dist_gate_validation.csv`).
+The gate passes 8 and flags 4. Note what the flagged ones have in common:
+`px_per_mm` is a *fixed property of the display* and should be identical every
+session, so its session-to-session spread is a direct readout of card-task error.
+
+| run | measured | error | card scale vs median | gate |
+|---|---|---|---|---|
+| ANON-Z1AQ28UQXR | 430 mm | -144 mm | **+38.3%** | flagged |
+| ANON-7K7X2HBSP6 | 473 mm | -101 mm | **+13.8%** | flagged |
+| ANON-IDR0RVWHYH | 495 mm | -79 mm | **+28.6%** | flagged |
+| ANON-ND2BQ7H8QQ | 512 mm | -62 mm | +1.0% | flagged |
+| *(8 others)* | 543-605 mm | -30..+31 mm | -3.0% to +1.0% | pass |
+
+Three of the four flagged runs had a card scale wrong by 14-38%: the physical
+measurement was simply mis-set, and it surfaced as an apparently short viewing
+distance. The fourth (ANON-ND2BQ7H8QQ) had a correct card scale and genuinely sat
+6 cm too close. Both failure modes are ones you want flagged, and a single
+distance gate catches both -- which is the argument for checking distance rather
+than trying to validate the card step directly.
+
+**Logged per run:** `view_dist_target_mm`, `view_dist_error_mm`,
+`view_dist_within_tolerance`, `calibration_attempts`, `px_per_mm` (true, i.e.
+scale-corrected) and `px_per_degree_at_target` -- the px/deg the card alone
+implies *if* the participant is at the target. That last one is a genuinely
+independent estimate, since the card's physical reference cancels out of the
+plugin's own `px2deg`; the two agree exactly when the measured distance equals the
+target and their ratio is `574 / view_dist_mm`, so the distance error is
+recoverable from the saved data alone.
+
+Covered by `tests/verify_motion.js` (62 checks: gate pass, gate fail and loop,
+retry copy naming the direction and magnitude, finite retry budget, the
+cross-check ratio) and `tests/verify_timeline.js` (the assembled timeline still
+receives the calibration node, in seating -> calibration -> seating_retry order,
+before the instructions).
+
+---
+
 ## 10. Ethics & consent
 
 `sections.js` includes an on-screen information sheet and consent checkbox
