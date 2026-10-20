@@ -14,7 +14,7 @@ study measures an **objective** motion-sensitivity performance measure, which is
 robust to the uncontrolled displays, viewing distances, and refresh rates of
 online participants.
 
-![Velocity fields and response mapping for the three motion types](design_velocity_fields.png)
+![Velocity fields and response mapping for the four motion types](design_velocity_fields.png)
 
 ---
 
@@ -110,7 +110,7 @@ https://<username>.github.io/<repo>/?motion=radial
 
 If `motion` is absent, the run falls back to `CONFIG.MOTION_TYPE` (default
 `translation`). The resolved motion type is folded into the per-participant RNG
-seed, so the three runs get **independent but reproducible** trial lists and
+seed, so the four runs get **independent but reproducible** trial lists and
 letter streams.
 
 **Within-subject.** Each participant completes **all four** motion types as
@@ -123,8 +123,8 @@ split them across days if that is too long for one sitting.
 four runs (e.g. a 4×4 Latin square: T-R-S-D, R-S-D-T, S-D-T-R, D-T-R-S, where D
 = radial) removes practice/fatigue
 confounds from the between-type comparison. On Prolific this is done by
-assigning participants to the three study links in a counterbalanced order; each
-link carries a different `motion` parameter. Link a participant's three runs by
+assigning participants to the four study links in a counterbalanced order; each
+link carries a different `motion` parameter. Link a participant's four runs by
 their Prolific PID (recorded as `subject_id` in every row).
 
 **Response mapping** (also shown in the figure above):
@@ -322,7 +322,7 @@ Online_RDK_Experiment/
 │   └── plugin-rdk-load.js     # custom canvas RDK + RSVP plugin (core stimulus engine)
 ├── tests/
 │   └── verify_motion.js       # headless Node harness: kinematics, RMS matching, response mapping
-├── design_velocity_fields.png # three velocity fields + CW/CCW response mapping
+├── design_velocity_fields.png # four velocity fields + response mapping (design_figures.py)
 ├── analysis/
 │   ├── weibull_analysis.py    # single-participant pipeline (per-type Weibull fits, load pre-check, cross-type + display tag)
 │   ├── analyze.py             # group scaffold (per-type fits, motion-type effect, engagement + display-provenance gates)
@@ -426,10 +426,10 @@ https://<username>.github.io/<repo>/?motion=rotation&PROLIFIC_PID={{%PROLIFIC_PI
 ```
 
 (Prolific substitutes the real values per participant.) Set `motion=` to the
-type for **that** study — you create **three** Prolific studies, one per motion
+type for **that** study — you create **four** Prolific studies, one per motion
 type, each pointing at the same GitHub Pages URL with a different `motion`
 value. Counterbalance the order in which each participant is invited to the
-three (§1a).
+four (§1a).
 
 ### 6b. Completion redirect
 1. On Prolific, choose **"Redirect to a URL"** (or use a completion code).
@@ -622,9 +622,9 @@ One row per jsPsych trial. Rows where `trial_kind == "rdk"` are the RDK trials;
 | `load_condition` | `low` / `high` |
 | `load_design` | `single:low` / `single:high` / `both` — which load design this run used (§1b) |
 | `reps_per_cell_used` | reps per coherence × direction cell actually run (16 single-load, 8 two-block) |
-| `motion_type` | `translation` / `rotation` / `spiral` (fixed per run) |
+| `motion_type` | `translation` / `rotation` / `spiral` / `radial` (fixed per run) |
 | `coherence` | motion coherence 0–1 |
-| `direction` | true motion direction — `left`/`right` (translation) or `cw`/`ccw` (rotation, spiral) |
+| `direction` | true motion direction — `left`/`right` (translation), `cw`/`ccw` (rotation, spiral), or `expand`/`contract` (radial) |
 | `radial_direction` | spiral only — `expand`/`contract` nuisance sign (`null`/`na` otherwise) |
 | `motion_response` | participant's direction choice (`left`/`right` or `cw`/`ccw`) |
 | `motion_correct` | boolean — direction correct |
@@ -655,7 +655,7 @@ participants' CSVs: load → QC exclusions → per-participant Weibull psychomet
 fit → 75% coherence threshold → **motion-type main effect**, **per-type paired
 load test** (with the load-engagement gate), plus figures. It is motion-type
 aware: runs are matched within participant by `subject_id` (the Prolific PID),
-so one participant's three runs (`translation`, `rotation`, `spiral`) line up
+so one participant's four runs (`translation`, `rotation`, `spiral`, `radial`) line up
 across the between-subject sample.
 
 ```bash
@@ -678,7 +678,7 @@ python analyze.py --data_dir ../data --out_dir ./out
   load cost with runs where the RSVP contrast never differentiated. → per-run
   verdicts in `load_engagement.csv`, dropped runs in `load_test_exclusions.csv`,
   surviving tests in `group_load_by_type.csv`.
-- **Display-provenance check.** Each participant self-calibrates and their three
+- **Display-provenance check.** Each participant self-calibrates and their four
   motion-type runs may fall on different days or devices. The virtual chinrest
   equates *spatial* scaling, but a change of physical display still changes
   luminance / contrast / gamma / panel persistence, which calibration cannot
@@ -709,14 +709,14 @@ is aware of the four motion types:
 ```bash
 cd analysis
 python weibull_analysis.py path/to/data.csv --out out_dir [--nboot 2000] \
-       [--motion-type translation|rotation|spiral]
+       [--motion-type translation|rotation|spiral|radial]
 ```
 
 - **Motion type is detected automatically** from the `motion_type` column and
   the full pipeline runs **per type**. A file with one type (a single run — the
   normal case) writes legacy filenames: `weibull_fit.png`, `weibull_params.csv`,
   `rsvp_tradeoff.png`, `rsvp_tradeoff_params.csv`, `direction_bias.csv`. A file
-  holding several types (e.g. a participant's three runs concatenated) prefixes
+  holding several types (e.g. a participant's four runs concatenated) prefixes
   every output with the type (`rotation_weibull_fit.png`, …) and writes a
   cross-type `weibull_params_all_types.csv`. `--motion-type` restricts to one
   type. CSVs with no `motion_type` column (earliest translation-only pilots) are
@@ -783,7 +783,8 @@ python weibull_analysis.py path/to/data.csv --out out_dir [--nboot 2000] \
   judgement).
 
 Validated on real translation data (reproduces the prior run's thresholds) and
-on a synthetic three-type file (per-type facet, cw/ccw tables, spiral radial
+on a synthetic four-type file (per-type facet, cw/ccw tables, radial sign
+thresholds, spiral radial
 check, and cross-type comparison all produced).
 
 ---
@@ -809,10 +810,16 @@ It checks, at full coherence (all dots signal, deterministic motion):
 - **Spiral** — radius grows (expand) / shrinks (contract), angle advances with
   the right sign, and the **balanced-screw** identity |Δr| = r·|Δθ| holds (local
   45°).
+- **Radial** — radius grows (expand) / shrinks (contract), the angular
+  component is exactly zero, the per-frame step equals the uniform reference
+  speed, and the two signs are mirror images.
 - **Motion-energy matching** — the area-weighted RMS retinal speed is equal
-  across translation, rotation, and spiral.
+  across translation, rotation, spiral, and both radial signs; expansion and
+  contraction are additionally checked against **each other** to 2%, since an
+  energy difference between them would masquerade as the effect being measured.
 - **Response mapping** — injecting synthetic arrow keys confirms Left → CCW /
   Right → CW for rotation & spiral, Left → left / Right → right for translation,
+  Left → contract / Right → expand for radial,
   and correct scoring.
 - **Trial balance** — the spiral radial nuisance is 50/50 within every
   coherence × sense cell, and all four types produce equal trials per block.
@@ -855,7 +862,7 @@ coding requires no special handling.
 
 **Low-level motion energy is equated across types (ruled-out alternative).** A
 motion-type threshold difference is *not* attributable to a difference in
-low-level motion energy: the three velocity fields are constructed to hold the
+low-level motion energy: the four velocity fields are constructed to hold the
 kinematic ME proxy (area-weighted ⟨speed²⟩, which for the constant-size online
 dots equals ⟨area × speed²⟩) equal to the reference v². This is **verified**
 numerically on the shipped 2°–7° aperture — reproducing the plugin's discrete
@@ -981,7 +988,7 @@ resolves the confound directly, so the unknown Saturday Mac luminance no longer
 needs to be recovered.
 
 For the online sample the analogous risk is per-participant: each participant
-self-calibrates and their three runs may fall on different days or devices. A
+self-calibrates and their four runs may fall on different days or devices. A
 display-provenance check that flags participants whose runs were not collected
 under a consistent display profile is the group-level counterpart to this
 control (see `analyze.py`).
@@ -1014,7 +1021,8 @@ appropriate ethical approval.
 
 - [ ] `RECRUITMENT` set correctly (`auto` / `prolific` / `standalone`).
 - [ ] `node tests/verify_motion.js` passes (exit 0) after any engine/config change.
-- [ ] Motion type selected per run via `?motion=translation|rotation|spiral` (three studies for the within-subject design); run order counterbalanced across participants.
+- [ ] Motion type selected per run via `?motion=translation|rotation|spiral|radial` (four studies for the within-subject design); run order counterbalanced across participants.
+- [ ] Load design selected per run via `?load=low|high|both` (default `low`); low-load runs serve the motion-type contrast, `both` runs the load contrast (§1c).
 - [ ] `MIN_AGE_YEARS`, `STORE_DOB`, `COLLECT_DEMOGRAPHICS`, `EXCLUDE_PHOTOSENSITIVE` reviewed against your ethics protocol.
 - [ ] Intake questionnaire items trimmed to what your analysis uses.
 - [ ] `DATAPIPE_EXPERIMENT_ID` set; `SAVE_TO_DATAPIPE: true`.
