@@ -514,8 +514,19 @@ var jsPsychRdkLoad = (function (jspsych) {
           : isRot
           ? "Which way were the dots rotating overall?"
           : "Which way were the dots moving overall?";
+        // The surrounding <p> sets letter-spacing:0.5em, which inserts a gap
+        // after EVERY character -- that pulled the radial glyph pairs apart
+        // into four evenly-spaced arrows and destroyed the pairing that was
+        // meant to carry the mapping. Reset the spacing inside each pair and
+        // label it with the word, so the mapping does not depend on reading
+        // arrow geometry at all.
+        const radialGlyph = (arrows, word) =>
+          '<span style="letter-spacing:normal;">' + arrows +
+          '</span><span style="font-size:0.42em;letter-spacing:normal;">&nbsp;' +
+          word + "</span>";
         const glyphs = isRadial
-          ? "&rarr;&larr; &nbsp; &larr;&nbsp;&rarr;"
+          ? radialGlyph("&rarr;&larr;", "inward") +
+            "&nbsp;&nbsp;&nbsp;" + radialGlyph("&larr;&rarr;", "outward")
           : isRot
           ? "&#x21ba; &nbsp; &#x21bb;"
           : "&larr; &nbsp; &rarr;";

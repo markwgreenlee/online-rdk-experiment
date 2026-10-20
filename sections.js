@@ -30,10 +30,16 @@ window.SECTIONS = (function () {
   const pick = (rad, rot, tra) => (isRad ? rad : isRot ? rot : tra);
   const V = {
     // short verb for the coherent motion
-    verb: pick("move outward or inward together", "rotate together", "drift together"),
+    verb: pick("move inward or outward together", "rotate together", "drift together"),
     // the two response alternatives, human-readable
     alts: pick(
-      "<b>outward</b> (expanding) or <b>inward</b> (contracting)",
+      // ORDER IS LOAD-BEARING: the alternatives must be listed in the same
+      // order as the response keys (left-key alternative FIRST), because that
+      // is the pattern every other motion type sets. Listing them
+      // outward-first while the keys read contracting-first inverted the
+      // implied mapping and cost a whole session (run ANON-ND2BQ7H8QQ:
+      // 0/32 correct at 64% coherence). tests/verify_motion.js now asserts it.
+      "<b>inward</b> (contracting) or <b>outward</b> (expanding)",
       "<b>counter-clockwise</b> or <b>clockwise</b>",
       "<b>left</b> or <b>right</b>"
     ),

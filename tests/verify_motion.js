@@ -357,6 +357,57 @@ function runResponse(trial, keyPressed) {
   check("translation RIGHT -> right", tR.ok && tR.resp === "right", "resp=" + (tR.resp));
 }
 
+// ======================================== INSTRUCTION / KEY-ORDER CONSISTENCY
+// The plugin's own key decode is verified above, but nothing checked that the
+// INSTRUCTIONS name the alternatives in the same order as the keys. They did
+// not for radial -- the instructions read "outward or inward" while the keys
+// read "left = contracting, right = expanding" -- which inverted the implied
+// mapping for the participant and wasted a full session (ANON-ND2BQ7H8QQ:
+// 0/32 correct at 64% coherence, a floor only reachable by answering backwards).
+// This asserts, per motion type, that the FIRST-named alternative in the
+// instruction text is the one bound to the LEFT arrow.
+console.log("\n[instruction / key-order consistency]");
+{
+  const fs = require("fs");
+  const sections = fs.readFileSync(__dirname + "/../sections.js", "utf8");
+  const plugin = fs.readFileSync(__dirname + "/../plugins/plugin-rdk-load.js", "utf8");
+
+  // Per motion type: the word the instructions use for the LEFT-arrow
+  // alternative and for the RIGHT-arrow alternative. The left one must appear
+  // FIRST in the instruction text. Note "clockwise" is a substring of
+  // "counter-clockwise", so the right-word search excludes that prefix.
+  const pair = {
+    radial:      { left: /inward/,            right: /outward/ },
+    rotation:    { left: /counter-clockwise/, right: /(?<!counter-)clockwise/ },
+    translation: { left: /\bleft\b/,          right: /\bright\b/ },
+  };
+
+  const altsBlock = sections.match(/alts:\s*pick\(([\s\S]*?)\n\s*\),/);
+  check("sections.js exposes V.alts via pick()", !!altsBlock);
+  const strings = (altsBlock ? altsBlock[1] : "").match(/"([^"]*)"/g) || [];
+  const order = ["radial", "rotation", "translation"];
+  check("V.alts has one branch per motion family", strings.length === 3,
+    "got " + strings.length);
+  strings.forEach((raw, i) => {
+    const mt = order[i];
+    if (!mt || !pair[mt]) return;
+    const plain = raw.replace(/<[^>]+>/g, "").replace(/"/g, "").toLowerCase();
+    const mL = plain.match(pair[mt].left), mR = plain.match(pair[mt].right);
+    const ok = mL && mR && mL.index < mR.index;
+    check(`${mt}: instructions name the LEFT-arrow alternative first`, !!ok,
+      `left@${mL ? mL.index : "none"} right@${mR ? mR.index : "none"} :: "${plain.trim()}"`);
+  });
+
+  // the radial glyph pair must not inherit the 0.5em letter-spacing that
+  // pulled the arrows apart and made the two pairs indistinguishable
+  check("radial response glyphs reset letter-spacing",
+    /radialGlyph\s*=\s*\(arrows, word\)/.test(plugin) &&
+    /letter-spacing:normal/.test(plugin));
+  check("radial response glyphs are word-labelled (mapping not glyph-only)",
+    /radialGlyph\("&rarr;&larr;", "inward"\)/.test(plugin) &&
+    /radialGlyph\("&larr;&rarr;", "outward"\)/.test(plugin));
+}
+
 console.log("\n=========================================");
 console.log("  " + PASS + " passed, " + FAIL + " failed");
 console.log("=========================================");

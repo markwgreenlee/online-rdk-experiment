@@ -750,9 +750,17 @@ def main():
     engagement = load_engagement(kept)
     engagement.to_csv(os.path.join(args.out_dir, "load_engagement.csv"),
                       index=False)
-    n_flag = int((engagement["engaged"] == False).sum())  # noqa: E712
+    # `engagement` is an EMPTY frame (no columns) when no participant survived
+    # QC, so guard the column access -- a run that is correctly excluded should
+    # produce a clean report, not a traceback.
+    n_flag = (int((engagement["engaged"] == False).sum())  # noqa: E712
+              if "engaged" in engagement.columns else 0)
     print(f"Load-engagement: {n_flag}/{len(engagement)} run(s) did NOT engage "
           f"(dropped from the paired load test).")
+    if kept.empty:
+        print("No participant passed QC — see qc_report.csv for the reasons. "
+              "Nothing further to analyse.")
+        return
 
     fits = fit_all(kept)
     fits.to_csv(os.path.join(args.out_dir, "thresholds_by_subject.csv"),
