@@ -180,7 +180,6 @@ function makeRdkTrial(spec, isPractice) {
     rsvp_color: CONFIG.RSVP_COLOR,
     load_condition: spec.load_condition,
     rsvp_max_targets: CONFIG.RSVP_MAX_TARGETS,
-    rsvp_target_present_p: CONFIG.RSVP_TARGET_PRESENT_P,
     feedback: !!isPractice,
     // NOTE: jsPsych only writes the `data` object (plus fields the plugin adds
     // in finishTrial) to the saved CSV — trial *parameters* like coherence are
@@ -194,6 +193,14 @@ function makeRdkTrial(spec, isPractice) {
       radial_direction: spec.radial_direction,
       load_condition: spec.load_condition,
       rsvp_n_targets: s.nTargets,
+      // The stream DESIGN must reach the CSV: the analysis derives the
+      // secondary-task chance levels from these two fields (README 6e) and
+      // silently falls back to the legacy uniform-prevalence assumption if they
+      // are missing, which would mis-score every run collected at 50%
+      // prevalence. They are trial *parameters* too, but parameters are not
+      // persisted -- see the note above.
+      rsvp_max_targets: CONFIG.RSVP_MAX_TARGETS,
+      rsvp_target_present_p: CONFIG.RSVP_TARGET_PRESENT_P,
     },
   };
 }
