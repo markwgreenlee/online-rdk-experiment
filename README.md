@@ -1043,15 +1043,25 @@ before this fix rendered a *larger* stimulus than nominal, by a factor that
 differed per session. Thresholds from those runs are not on the same stimulus
 scale as runs collected after it. Two things follow:
 
-- The per-run true geometry **is recoverable**: aperture = `7 / scale_factor`
-  deg, dot speed = `6 / scale_factor` deg/s, both logged. Pre-fix runs can be
-  reanalysed with true angular size as a covariate rather than discarded.
+- The per-run true geometry **is recoverable for every pre-fix run**, because the
+  chinrest logs its own `scale_factor` column in the calibration row of the raw
+  CSV (this is the plugin's field; the explicit `chinrest_scale_factor` copy only
+  starts with runs collected after the fix). True values are
+  `aperture = 7 / scale_factor` deg, `inner = 2 / scale_factor` deg,
+  `speed = 6 / scale_factor` deg/s, `dot radius = 0.1 / scale_factor` deg and
+  `density = 2 x scale_factor^2` dots/deg^2 -- note density moves the *other* way,
+  since the dot count was fixed in pixel space. `analysis/pilot_true_geometry.csv`
+  tabulates all 12 runs. Pre-fix runs can therefore be reanalysed with true
+  angular size as a covariate rather than discarded.
 - Note which way the confound ran. The two spiral runs have the **highest**
-  scale factors (0.978, 0.926), i.e. the *smallest* effective aperture and the
-  *slowest* effective dots -- both of which raise a coherence threshold. Part of
-  the spiral elevation reported in the pilot may therefore be stimulus size
-  rather than pattern type. It does not account for a 2.5x threshold difference
-  on its own, but it is not negligible and must be stated.
+  scale factors (0.978, 0.926), i.e. the *smallest* effective aperture
+  (7.16, 7.56 deg vs up to 8.81) and the *slowest* effective dots (6.13,
+  6.48 deg/s vs up to 7.55) -- both of which tend to raise a coherence
+  threshold. Their dot density was correspondingly the highest (1.91, 1.72 vs
+  1.26 dots/deg^2), which pushes the other way. Part of the spiral elevation
+  reported in the pilot may therefore be stimulus geometry rather than pattern
+  type. It does not account for a 2.5x threshold difference on its own, but it is
+  not negligible, it is aligned with the effect, and it must be stated.
 
 This also retires a claim: section 8b previously argued that the pilot runs
 "all subtended ~39.9 px/deg ... matched to 0.2%", offered as evidence that

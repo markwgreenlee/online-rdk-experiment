@@ -1,0 +1,13 @@
+file,subject,motion,scale_factor,px2deg_reported,px2deg_true,aperture_outer_deg_true,aperture_inner_deg_true,dot_speed_dps_true,dot_radius_deg_true,dot_density_true
+ANON-3D22LCQJK5,mwg2,radial,0.8517,40.0,34.07,8.22,2.35,7.04,0.1174,1.451
+ANON-ND2BQ7H8QQ,mwg2,radial,0.7946,40.0,31.78,8.81,2.52,7.55,0.1259,1.263
+ANON-U2DHR5J0W2,mwg_31072026_rotation_run1,rotation,0.8953,40.0,35.81,7.82,2.23,6.7,0.1117,1.603
+ANON-WOC135S1YF,mwg03082026_rotation,rotation,0.8442,40.0,33.77,8.29,2.37,7.11,0.1185,1.425
+ANON-IDR0RVWHYH,mwg004_01082026_spiral,spiral,0.978,40.0,39.12,7.16,2.04,6.13,0.1022,1.913
+ANON-MCRXCAJKBS,mwg03082026_spiral,spiral,0.926,40.0,37.04,7.56,2.16,6.48,0.108,1.715
+ANON-6NTJC1SEY4,mwg_31072026_translation_run1,translation,0.8679,40.0,34.72,8.07,2.3,6.91,0.1152,1.507
+ANON-7K7X2HBSP6,mwg1,translation,0.8276,40.0,33.1,8.46,2.42,7.25,0.1208,1.37
+ANON-BVURHWVDWV,mwg003,translation,0.8343,40.0,33.37,8.39,2.4,7.19,0.1199,1.392
+ANON-CXUW28Q5TP,mwg002,translation,0.8897,40.0,35.59,7.87,2.25,6.74,0.1124,1.583
+ANON-IG82F27BAV,mwg03082026_trans,translation,0.8707,40.0,34.83,8.04,2.3,6.89,0.1149,1.516
+ANON-Z1AQ28UQXR,mwg20260821_1,translation,0.9141,40.0,36.56,7.66,2.19,6.56,0.1094,1.671
